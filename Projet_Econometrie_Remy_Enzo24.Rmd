@@ -50,7 +50,7 @@ knitr::opts_chunk$set(echo = TRUE)
 On charge les packages nécessaires pour le début :
 
 ```{r}
-pacman::p_load(tidyverse, knitr, vtable)
+pacman::p_load(tidyverse, knitr, vtable, broom)
 ```
 
 ## Source des données :
@@ -417,9 +417,20 @@ nbr_slr_atypiques <- length(salaires_atypiques) # Taille du vecteur.
 
 cat("On va avoir un total de", nbr_slr_atypiques, "salaires atypiques. \n")
 
-cat("Ces salaires vont être : \n")
+# Affichage propre d'un Top 5 des joueurs percevant ces salaires atypiques
 
-salaires_atypiques
+top_salaires <- nba_f %>% 
+  filter(Salary %in% salaires_atypiques) %>% 
+  arrange(desc(Salary)) %>% 
+  select(Player, Team, Salary) %>% 
+  head(5)
+
+kable(
+  top_salaires, 
+  format.args = list(big.mark = " "), # Pour espacer les millions
+  col.names = c("Joueur", "Équipe", "Salaire atypique"),
+  caption = "Top 5 des superstars aux salaires aberrants"
+)
 ```
 
 ```{r}
@@ -587,8 +598,14 @@ Ajustement d'un modèle de régression linéaire multiple. On cherche à expliqu
 ```{r}
 modele_multiple <- lm(Salary ~ FP + Age + GP, data = nba_f)
 
-# Affichage des résultats détaillés du modèle multiple
-summary(modele_multiple)
+# Affichage propre des résultats de la régression multiple
+
+kable(
+  tidy(modele_multiple), 
+  digits = 3, 
+  col.names = c("Variable", "Estimation", "Erreur standard", "Statistique t", "P-value"),
+  caption = "Résultats du modèle de régression linéaire multiple"
+)
 ```
 La performance (FP) n'expliquant que 41% du salaire, nous ajoutons l'âge (expérience) et les matchs joués (disponibilité) pour un modèle plus complet.
 
@@ -692,7 +709,11 @@ Modélisation de l'Analyse de la Variance (ANOVA) :
 modele_anova <- aov(Salary ~ tranche_age, data = nba_f)
 
 # Affichage du résumé de l'ANOVA pour analyser la p-value
-summary(modele_anova)
+kable(
+  tidy(modele_anova), 
+  digits = 4,
+  caption = "Tableau de l'Analyse de la Variance (Salaire selon l'âge)"
+)
 ```
 
 
@@ -755,7 +776,7 @@ Enfin, passé ce sommet, le mouvement s'inverse et la pente redescend pour les d
 Chargement des librairy pour l'analyse de l'ACP. 
 
 ```{r}
-pacman::p_load(broom, ggfortify, corrr)
+pacman::p_load(ggfortify, corrr)
 ```
 
 On garde que les variables quantitatives :
@@ -1055,7 +1076,21 @@ kable(
 # initial (nba_f)
 scores_nba <- augment(pco_nba, data = nba_f)
 
-head(scores_nba)
+# Affichage propre des coordonnées des premiers joueurs sur les 3 axes principaux
+apercu_scores <- head(scores_nba %>% select(Player, .fittedPC1, .fittedPC2, .fittedPC3))
+
+# Transposition
+apercu_transp_scores <- as.data.frame(t(apercu_scores[, -1]))
+colnames(apercu_transp_scores) <- apercu_scores$Player
+apercu_transp_scores$Axe <- c("PC1", "PC2", "PC3")
+
+# Affichage avec kable
+kable(
+  apercu_transp_scores %>% select(Axe, everything()), 
+  digits = 2, 
+  row.names = FALSE, 
+  caption = "Coordonnées des 6 premiers joueurs sur les 3 composantes (nouvelles variables)"
+)
 ```
 
 ```{r}
@@ -1172,9 +1207,8 @@ res_km <- kmeans(
   nstart = 25  # On tente 25 configurations de départ différentes pour
   # garantir la stabilité du résultat.
 )
-
-res_km
 ```
+
 On associe nos groupes aux joueurs :
 
 ```{r}
