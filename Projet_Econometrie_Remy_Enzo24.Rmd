@@ -548,6 +548,22 @@ ggplot(nba_f, aes(sample = residus)) +
 
 L’analyse du Q-Q plot révèle un décrochage majeur pour les hauts revenus, le modèle linéaire va avoir des difficultés à prédire avec précision le salaire des superstars. Ce constat démontre que la NBA suit une structure de récompense pas totalement linéaire, le passage de joueur solide à star de la ligue ne se traduit pas par une simple augmentation proportionnelle, mais par un saut financier exceptionnel qui s'affranchit des statistiques de performance classiques. Pour conclure, on peut dire qu'au sommet de la hiérarchie, le prestige et le statut de star l'emportent sur la logique mathématique.
 
+
+Ajustement d'un modèle de régression linéaire multiple. On cherche à expliquer le salaire en combinant la performance (FP), l'expérience (Age) et la disponibilité physique (GP) :
+
+```{r}
+modele_multiple <- lm(Salary ~ FP + Age + GP, data = nba_f)
+
+# Affichage des résultats détaillés du modèle multiple
+summary(modele_multiple)
+```
+La performance (FP) n'expliquant que 41% du salaire, nous ajoutons l'âge (expérience) et les matchs joués (disponibilité) pour un modèle plus complet.
+
+On cherche à expliquer le R² qui passe à 56%, ce qui prouve qu'ajouter l'expérience et la disponibilité modélise bien mieux le salaire ainsi que la significativité, les variables vont être plus significatives (p-values très faibles). 
+
+De plus à performance égale, l'âge augmente le salaire, confirmant la "prime à l'expérience" des vétérans en NBA. Étonnamment, le nomvre de Game Played (GP) a un coefficient négatif, illustrant probablement le load management (mise au repos) des superstars bien payées.
+
+
 \newpage
 \section*{IV. Analyse multivarié entre deux variables qualitative :}
 \hrule 
@@ -567,6 +583,20 @@ tableau_quali <- table(
 
 tableau_quali
 ```
+On va faire un test du Chi-2 avec simulation de Monte-Carlo afin de confirmer notre intuition 
+
+
+```{r}
+# Ici la simulation permet de contourner le problème des effectifs faibles dans certaines tranches d'âge
+test_chi2 <- chisq.test(tableau_quali, simulate.p.value = TRUE)
+
+# Affichage des résultats du test
+test_chi2
+```
+Afin de contourner le problème des effectifs théoriques faibles dans certaines catégories d'âge extrêmes, nous avons appliqué un test du Chi-2 avec simulation de Monte-Carlo. Le test nous renvoie une p-value d'environ 0.047. Celle-ci étant inférieure au seuil de significativité classique de 0.05, nous rejetons l'hypothèse d'indépendance.
+
+Cela confirme mathématiquement notre observation graphique, parmi les joueurs les plus productifs (ceux ayant un score Fantasy supérieur à la moyenne), il existe une dépendance statistiquement significative entre la tranche d'âge et l'impact sur le terrain (positif ou négatif). Ce résultat prouve que l'expérience acquise avec l'âge est une composante réelle de l'efficacité collective.
+
 
 ```{r}
 ggplot(
@@ -592,7 +622,7 @@ L’analyse globale de ces données met en lumière la dualité du marché de la
 
 Cette logique statistique rencontre ses limites avec les superstars, l'étude du binôme âge/impact révèle que si le talent statistique avec le score Fantasy est précoce, l'efficacité collective avec le Plus/Minus (+/-) est un luxe qui s'acquiert avec le temps. Les jeunes joueurs avec des bons score FP ne vont pas forcément avoir un impact global qui va résulter sur la victoire de l'équipe tandis que les vétérans, plus rentables, font réellement basculer les matchs. 
 
-En somme, les jeunes talents produisent des statistiques individuelles élevées mais l'impact collectif positif demeure l'apanage des vétérans, confirmant que si le talent se paie, l'expérience fait gagner.
+En somme, les jeunes talents produisent des statistiques individuelles élevées mais l'impact collectif positif demeure l'apanage des vétérans, confirmant que si le talent se paie, l'expérience va faire gagner.
 
 \newpage
 \section*{V. Analyse multivarié entre variable qualitatif et quantitatif :}
@@ -617,6 +647,15 @@ kable(tableau_age_salaire,
       caption = "Salaire selon la tranche d'âge")
 ```
 
+Modélisation de l'Analyse de la Variance (ANOVA) :
+
+```{r}
+# On teste avec ANOVA si le salaire moyen diffère de manière significative selon la tranche d'âge
+modele_anova <- aov(Salary ~ tranche_age, data = nba_f)
+
+# Affichage du résumé de l'ANOVA pour analyser la p-value
+summary(modele_anova)
+```
 
 
 ```{r}
@@ -632,8 +671,10 @@ ggplot(nba_f) +
   ) +
   theme_minimal()
 ```
- 
-On observe que les carrière en NBA peuvent être différencié sous 4 tranches d'âge :
+
+Le résultat de l'ANOVA affiche une probabilité (Pr(>F)) extrêmement faible (largement inférieure à 0.05). Cela rejette l'hypothèse selon laquelle les salaires moyens seraient identiques entre les groupes. Nous avons donc la preuve statistique que la tranche d'âge a un effet réel et significatif sur la rémunération des joueurs.
+
+En combinant ce test avec l'observation des boîtes à moustaches, on observe que les carrières en NBA peuvent être différenciées sous 4 grandes étapes :
 
 L'entrée dans la ligue, pour ceux entre 18 et 23 ans, se fait avec des salaires relativement bas et homogènes, dictés par les contrats 'rookies'. Ce qui se passe, c'est qu'on va donner une période d'essai aux jeunes joueurs avec des salaires faibles pour ensuite, potentiellement, pouvoir passer au deuxième contrat lors de la seconde tranche, ou simplement les couper s'ils ne sont pas au niveau.
 
@@ -1056,6 +1097,33 @@ fviz_nbclust(
 
 D'après l'analyse visuelle, le coude se situe à k=3. Nous allons donc utiliser 3 clusters pour représenter notre jeu de données.
 
+Procédons à la Classification Ascendante Hiérarchique (CAH)
+
+```{r}
+# Calcul de la matrice des distances euclidiennes entre les joueurs
+matrice_distances <- dist(donnees_kmeans_scaled, method = "euclidean")
+
+# On utilise la méthode de Ward qui minimise la variance à l'intérieur des clusters 
+# afin de faire la CAH
+res_cah <- hclust(matrice_distances, method = "ward.D2")
+
+# Visualisation du dendrogramme avec le package factoextra
+fviz_dend(
+  res_cah, # L'objet contenant le résultat de la CAH
+  k = 3, # On met en évidence 3 groupes
+  show_labels = FALSE, # On masque le nom des joueurs pour ne pas biaiser
+  rect = TRUE, # Ajout de rectangles autour des groupes pour bien les délimiter
+  rect_fill = TRUE, # Colore l'intérieur des rectangles
+  palette = "jco", # Choix d'une palette de couleurs
+  main = "Dendrogramme de la Classification Ascendante Hiérarchique", # Titre
+  ylab = "Hauteur (Distance)", # Nom de l'axe des ordonnées
+  xlab = "Joueurs" # Nom de l'axe des abscisses
+)
+```
+L'arbre hiérarchique illustre le processus de regroupement progressif des joueurs en fonction de leurs similarités statistiques. La hauteur des branches, sur l'axe des ordonnées, représente la distance ou la "différence" entre les groupes.
+
+En observant les sauts de hauteur les plus importants dans l'arbre, on remarque qu'une coupe en 3 grands groupes (encadrés ici par les rectangles) est très naturelle et cohérente. Cela vient parfaitement valider notre analyse précédente avec la méthode du coude : la séparation de la ligue en 3 profils distincts est la structure la plus pertinente pour nos données. Nous allons donc conserver ce paramètre (k=3) pour appliquer l'algorithme des K-means afin de consolider ces groupes.
+
 ```{r}
 set.seed(123)
 
@@ -1095,14 +1163,27 @@ profil_clusters <- nba_kmeans %>%
     FG_moyen = mean(FGper, na.rm = TRUE)
   )
 
+# Transposition du tableau pour passer les clusters en colonnes et les variables en lignes
+profil_transp <- as.data.frame(t(profil_clusters[, -1]))
+
+# Renommage des colonnes avec des noms clairs pour chaque cluster
+colnames(profil_transp) <- paste("Cluster", profil_clusters$cluster)
+
+# Ajout du nom des statistiques sous forme de colonne propre
+profil_transp$Statistique <- rownames(profil_transp)
+
+# Réorganisation des colonnes pour afficher le nom de la statistique en premier
+profil_propre <- profil_transp %>%
+  select(Statistique, everything())
+
+# Affichage du tableau vertical propre et lisible avec kable
 kable(
-  profil_clusters,
+  profil_propre,
   digits = 2,
+  row.names = FALSE,
   caption = "Profil moyen des clusters obtenus par k-means"
 )
 ```
-
-A voir sur le fichier Rmd car pour 19 variables ce tableau ne va pas être très beau, désolé.
 
 Cette segmentation met en évidence une hiérarchie sportive et financière très marquée, divisant la ligue en trois catégories distinctes. 
 
