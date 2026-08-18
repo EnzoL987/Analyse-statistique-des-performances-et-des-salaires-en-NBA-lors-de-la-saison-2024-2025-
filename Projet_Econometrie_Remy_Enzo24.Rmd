@@ -1,0 +1,1196 @@
+---
+title: "Projet Économétrie - Analyse statistique des performances et des salaires en NBA lors de la saison 2024-2025"
+author: "M. Rémy et L. Enzo"
+date: "2026-04-20"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+---
+
+\begin{center}
+\fbox{
+  \begin{minipage}{0.9\textwidth}
+    \centering
+    \vspace{2mm}
+    \large \textbf{Introduction} 
+    \vspace{2mm}
+  \end{minipage}
+}
+\end{center}
+
+Le basket-ball est un sport collectif opposant deux équipes de cinq joueurs dont l’objectif est de marquer plus de points que l’adversaire. Chaque joueur possède un rôle spécifique : marquer, défendre ou encore organiser le jeu.
+
+La **NBA** (National Basketball Association) est la ligue de référence mondiale du basket-ball, unifiant les meilleurs talents américains et internationaux. Comme ce sport repose sur une multitude d'actions de jeu, chaque rencontre génère une quantité massive de données.
+
+Les principales statistiques vont être des vrais arguments afin d'argumenter sur qui sont les meilleurs joueurs et comment ils impactent le jeu. Cependant, il est important de noter au préalable que certaines dimensions du jeu restent difficiles à mesurer uniquement avec des chiffres : le leadership, ou encore l’influence dans les moments importants.
+
+Dans ce projet, nous analysons les données réelles de la saison 2024-2025 de la NBA afin d'explorer la corrélation entre les performances statistiques et la rémunération des joueurs. L'objectif est de déterminer dans quelle mesure les chiffres reflètent fidèlement la valeur marchande d'un athlète, tout en mettant en lumière certaines tendances globales de la ligue qui méritent une analyse approfondie.
+
+Notre principale question sera la suivante :
+
+\begin{center}
+\fbox{
+  \begin{minipage}{0.9\textwidth}
+    \centering
+    \vspace{2mm}
+    \textit{Les statistiques permettent-elles réellement de refléter la valeur d’un joueur NBA ?}
+    \vspace{2mm}
+  \end{minipage}
+}
+\end{center}
+
+Pour voir le code :
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+On charge les packages nécessaires pour le début :
+
+```{r}
+pacman::p_load(tidyverse, knitr, vtable)
+```
+
+## Source des données :
+
+Pour ce projet, nous avons combiné deux sources de données. Comme les statistiques officielles de la NBA n'incluent pas les revenus des joueurs, nous y avons ajouté les salaires annuels provenant d'une base de données Kaggle.
+
+Importation des salaires :
+
+```{r}
+salaires <- read.csv("NBA Player Salaries_2024-25_1.csv")
+```
+
+Pour la base de données de la NBA on utilise read_csv car nous n'avons pas trouvé de base officiel utilisable sur R. Nous avons donc copié collé dans un tableau csv (base_stats_NBA_24_25.csv) les données touvés sur le site officiel de la NBA puis enregistré en .csv (https://www.nba.com/stats/players/traditional?SeasonType=Playoffs&Season=2024-25).
+
+```{r}
+stats <- read.csv("base_stats_NBA_24_25.csv")
+```
+
+Jointure des deux bases :
+
+```{r}
+nba <- inner_join(stats, salaires, by = "Player")
+```
+
+Aperçu :
+
+```{r}
+head(nba)
+```
+
+On va chercher à voir s'il y a des valeurs manqantes :
+
+```{r}
+nombre_na <- sum(is.na(nba))
+print(paste("Nombre de valeurs manquantes :", nombre_na))
+```
+
+Vue globale sur nos features :
+
+```{r}
+summary(nba)
+```
+
+
+
+Nettoyage de la base :
+
+```{r}
+nba1 <- nba %>%
+  distinct() %>% # Suppressions des doublons parfaits.
+  distinct(Player, .keep_all = TRUE) %>% # On enlève les joueurs en
+  # double en gardant la première occurence.
+  
+  # Pour la colonne Salary il faut enlever les signes $ et les virgules, 
+  # on va donc utiliser gsub("[\\$,]", "", Salary) qui va remplacer les $
+  # et les virgules par du vide. De plus on va aussi utilise
+  # as.numeric() afin de convertir le texte en nombre.
+  
+  mutate(Salary = as.numeric(gsub("[\\$,]", "", Salary))) %>%
+  
+  # On nettoye les colonnes d'équipes en double en supprimant la colonne
+  # Team.y.
+  select(-Team.y) %>%
+  
+  rename(Team = Team.x) # Et on renomme Team.x en simplement Team.
+
+head(nba1)
+
+# On revérifie pour les valeurs manquantes au cas ou.
+nombre_na <- sum(is.na(nba1))
+cat("Nombre de valeurs manquantes :", nombre_na,"\n")
+```
+
+On fait maintenant notre grande sélection des données qu'on vous présente dans la partie "Descriprion des données" qui vient juste après.
+
+```{r}
+nba_f <- nba1 %>% # On stocke le résultat dans un nouvel objet "nba_f".
+  
+  mutate( # On veut créer de nouvelles variables qualitatives ordinales.
+    
+    tranche_age = cut(
+      Age, # On découpe une l'âge en tranche.
+      breaks = seq(18, 43, by = 5), # des tranches de 5 années, en
+                          #commençant à 18 ans pour finir à 43 ans.
+      include.lowest = TRUE, # Juste pour être sur.
+      include.highest = TRUE,
+      labels = c( # On attribue des noms clairs à chaque intervalle.
+        "18-23 ans",
+        "23-28 ans",
+        "28-33 ans",
+        "33-38 ans",
+        "38-43 ans")
+    ),
+    
+    # On va faire la même chose mais pour les salaires.
+    classe_salaire = cut(
+      Salary,
+      breaks = seq(0, 60000000, by = 10000000),
+      include.lowest = TRUE,
+      include.highest = TRUE,
+      labels = c(
+        "0-10M", 
+        "10-20M",
+        "20-30M", 
+        "30-40M",
+        "40-50M",
+        "50-60M")
+    ),
+    
+    plusminus = ifelse( # Variable binaire pour expliciter plus 
+                        # facilement la variable "+/-".
+      plus_minus > 0,
+      
+      "Positif", # On affecte l'étiquette "Positif".
+      "Négatif" # Sinon "Négatif".
+      ), 
+      
+    origine = ifelse( # Simplification des origines des joueurs.
+      Nationality == "United States",
+      "Américain", # Soit Américain (comme la majorité de la ligue).
+      "Étranger" # Et Étranger pour le reste.
+    )
+  ) %>%
+  
+  select( # Selection des variables qui vont nous être intéressantes.
+    Player,
+    Team,
+    Age,
+    Nationality,
+    origine,
+    Salary,
+    classe_salaire,
+    GP,
+    Min,
+    FP,
+    PTS,
+    REB,
+    AST,
+    STL,
+    BLK,
+    TOV,
+    FGper,
+    tranche_age,
+    plus_minus,
+    plusminus
+  )
+
+
+options(scipen = 999) # On va étudier des salaires qui se comptent en millions donc on facilite d'entrée la lecture
+#  après avoir enlever les virgules et les "$".
+
+head(nba_f)
+```
+
+\newpage
+\section*{Description des données :}
+\hrule 
+\vspace{0.4cm}
+
+## Présentation générale du jeu de données :
+
+Nous disposons de nombreuses variables, nous allons donc d'abord poser un peu de contexte avant d'entrer dans le détail de chacune d'elles. Les variables représentent toutes la somme de l'ensemble des matchs de la saison. Nous adoptons ainsi un **regard général** sur l'année, sans faire de cas par cas.
+
+## Structure des données pour le jeu initial de données :
+
+Le jeu de données initial contient **31 variables**, dont 30 variables issues des statistiques officielles de la NBA, ainsi qu’une variable supplémentaire correspondant au salaire annuel des joueurs (Salary).
+
+```{r}
+dim(nba1)
+```
+
+## Structure des données pour le jeu final de données :
+
+```{r}
+dim(nba_f)
+```
+
+Par le travail de structuration que nous avons fait juste avant sur la base, nous n'avons plus que **19 variables**. 16 viennent de notre base initiale et 3 ont été crée. Ce qui nous donne donc :
+
+- 464 observations (Nos joueurs).
+- 19 variables. 
+
+Chaque ligne du jeu de données correspond ainsi à un joueur et regroupe ses statistiques individuelles **sur la saison**.
+
+Ces données vont nous permettre d’analyser les performances individuelles des joueurs à partir de différentes dimensions du jeu (attaque, défense, efficacité, volume de jeu), ainsi que leur impact global.
+
+## Valeurs manquantes :
+
+Nous n'avons aucune valeurs manquantes ni sur la base initiale ni sur la finale. 
+
+## Description des variables pour la base finale :
+
+Étant donné le grand nombre de variables dans notre base, nous allons nous focaliser uniquement sur les variables majeures qui vont être les plus **pertinentes** pour nos analyses.  
+Dans le basket, certaines variables sont dites "majeures", ces variables sont : **PTS, REB, AST, AST, STL et BLK.** Ces dernières vont être les éléments clés qui vont être analysées afin de juger les performances d'un joueur.
+
+Rentrons dans le détails des variables qui vont nous être utiles pour les analyses :
+
+### Variables qualitatives :
+
+- **Player** : Variable qualtitive nominale qui nous donne le prénom et le nom du joueur.
+
+- **Team** : Variable qualitative nominale qui nous donne le l'acronyme de l'équipe du joueur.
+
+- **Nationality** : Variable qualtitive nominal qui nous donne la nationalité du joueur.
+
+- **Origine** : Variable qualitative ordinale qui nous dit si un joueur est Américain ou d'une autre nationalité.
+
+- **classe_salaire** : Variable qualitative ordinale qui nous donne la tranche de salaire à laquelle le joueur appartient.
+
+- **Tranche_age** : Variable qualitative ordinale qui nous donne la tranche d'âge à laquelle le joueur appartient.
+
+- **plusminus** : Variable qualitative ordinale qui nous dit si la variable quantitatives "+/-" est positive ou négative.
+
+
+### Variables quantitatives :
+
+- **Age** : Varibale quantitative discrète nous donnant l'âge du joueur.
+
+- **Salary** : Variable quantitative continue qui représente le salaire annuel du joueur.
+
+- **GP** : Variable quantitative discrète qui nous donne le nombre de matchs joués.
+
+- **Min** : Variable quantitative continue représentant le nombre de minutes jouées par le joueur.
+
+- **FP** : Variable quantitative continue représentant le score "Fantasy" du joueur. Il s'agit d'une évaluation globale calculée via un algorithme. Vous pourrez donc vous focaliser sur cette valeur lorsque nous aborderons le niveau global d'un joueur.
+
+- **PTS** : Variable quantitative discrète représentant le nombre de point que le joueur a marqués.
+
+- **REB** : Variable quantitative discrète représentant le nombre de fois que le joueur a récupéré la balle après un tir raté.
+
+- **AST** : Variable quantitative discrète représentant le nombre de fois que le joueur a fait une passe décisive qui a mené à un panier marqué.
+
+- **STL** : Variable quantitative discrète représentant le nombre de fois que le joueur a voler la balle à un joueur de l'équipe adverse.
+
+- **BLK** : Variable quantitative discrète représentant le nombre de fois que le joueur a bloqué la balle lors d'un tir, empéchant ainsi un panier.
+
+- **TOV** : Variable quantitative discrète représentant le nombre de fois que le joueur a perdu la balle ou se l'ai fait voler par un joueur de l'équipe adverse.
+
+- **FG%** : Variable quantitative continue réprésentant le pourcentage de réussite sur l'ensemble de ses tirs.
+
+- **+/-** : Variable quantitative discrète représentant le différentiel de points de l’équipe lorsque le joueur est sur le terrain.
+
+
+
+### Pour les variables que nous n'allons **pas utiliser** nous avons :
+
+**Variables Quantitatives Continues** : 3P% (Pourcentage de réussite pour les tirs qui valent 3 points), FT% (Pourcentage de réussite pour les lancers francs).
+
+**Variables Quantitatives Discrètes** : W (nombre de partie gagnée), L (nombre de partie perdue), FGM (nombre total de tir que le joueur va mettre), FGA (nombre total de tirs que le joueur va essayer), 3PM (nombre de tir à 3 points que le joueur va mettre), 3PA (nombre de tir à trois points que le joueur va essayer), FTM (nombre de lancer franc que le joueur va mettre), FTA (nombre de lancer franc que le joueur va mettre), OREB (nombre de rebond dit offensif qui vont être pris sous le panier de l'équipe adverse), DREB (nombre de rebond dit défensif qui vont être pris sous le panier de l'équipe du joueur), PF ("Personnal foul", nombre de faute que le joueur va commetre), DD2 (représente le nombre de matchs avec au moins deux statistiques majeures supérieures ou égales à 10), TD3 (représente le nombre de matchs avec au moins trois statistiques majeures supérieures ou égales à 10).
+
+
+\newpage
+\section*{I. Analyse univarié de la variable quantitative Salary :}
+\hrule 
+\vspace{0.4cm}
+
+```{r}
+salaire <- nba_f$Salary # On isole la colonne des salaires.
+Salaire_moyen <- mean(salaire) # On calcule le salaire moyen.
+Salaire_median <- median(salaire) # On trouve le salaire median.
+Salaire_ecarttype <- sd(salaire) # On mesure l'écart-type.
+
+cat("Le salaire moyen dans la ligue va être :", Salaire_moyen, "millions de dollars. \n")
+cat("Le salaire médian dans la ligue va être :", Salaire_median,"millions de dollars. \n")
+cat("L'écart-type entre les salaires dans la ligue va être de :", Salaire_ecarttype, "millions de dollars.\n")
+```
+
+On remarque immédiatement que le salaire moyen est plus de deux fois supérieur au salaire médian. Cette disparité indique une forte asymétrie positive de la distribution : une minorité de joueurs stars, semble percevoir des rémunérations extrêmement élevées qui vont tirer la moyenne vers le haut.  
+L'écart-type, particulièrement important même à l'échelle du million, confirme cette hétérogénéité et illustre la grande dispersion des revenus au sein de la ligue.
+
+```{r}
+ggplot(data = tibble(salaire = salaire)) + # Prépare les données pour la
+  # visualisation graphique.
+  aes(x = salaire) + # On regarde seulement le salaire.
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  # Crée l'histogramme pour observer la distribution, bins indique 
+  # le nombre de colonnes (on a beaucoup de valeurs très répartis donc
+  # bins est grand).
+  labs(
+    title = "Distribution de la variable salaire", # Titre global
+    x = "Salaire (en dollars)", # Étiquette l'axe des abscisses.
+    y = "Effectif" # Étiquette l'axe des ordonnées.
+  ) +
+  theme_minimal() # Épure le design pour une meilleure lisibilité.
+```
+
+Cet histogramme nous confirme la forte asymétrie de la distribution salariale. En effet la majorité des joueurs se concentre sur les bas revenus tandis qu'une minorité de superstars perçoit des salaires extrêmes.  
+On a donc une explication sur pourquoi la moyenne est tirée vers le haut, les contrats les plus élevés de la ligue vont être bien supérieur à ceux de la majorité des joueurs qui vont avoirs des contrats plus modérés. 
+Le salaire médian est alors bien plus représentatif du joueur typique que le salaire moyen.
+
+```{r}
+tableau_freq <- data.frame(nba_f) %>% 
+  group_by(classe_salaire) %>% # On se focalise sur les classes de salaires.
+  
+  summarise(Effectif = n()) %>% # Calcule du nombre total de joueurs par tranche.
+  
+  mutate( 
+    Frequence = Effectif / sum(Effectif), # On rajoute la fréquence.
+    Frequence_Pourcentage = Frequence * 100, '%', # On convertit en %.
+  )
+
+cat("Tableau des effectifs et fréquences :\n") # Pour introduire.
+print(tableau_freq) # Affiche le tableau calculé.
+```
+
+Le tableau montre que 67 % des joueurs gagnent moins de 10 millions de dollars par an (ce qui correspond presque à notre moyenne), cette concentration massive confirme une distribution très inégalitaire où les hauts salaires font figure d'exception. Moins de 1 % de l'effectif atteint la tranche supérieure des 50 millions. Ces chiffres valident la structure pyramidale de l'économie de la ligue, où les plus forts vont être les mieux payés.
+
+```{r}
+ggplot(data = tibble(nba_f)) + # Préparation des données.
+  aes(y = Salary) + # On se focalise encore sur les salaires.
+  geom_boxplot(fill = "steelblue") + # Création du boxplot.
+  labs(
+    title = "Boîte à moustaches de la variable salaire", 
+    y = "Salaire" # On nomme que l'ordonée.
+  ) +
+  theme_minimal() 
+```
+
+Cette boîte à moustaches est parfaite pour nous montrer l'asymétrie extrême de la distribution salariale. La position très basse de la médiane et le tassement du rectangle bleu démontrent que la grande majorité des joueurs perçoit des revenus modestes et homogènes. 
+À l'inverse, la moustache supérieure s'étire vers le haut et laisse place à une multitude de points isolés représentant les valeurs aberrantes. Ces outliers confirment à nouveau l'existence d'une élite de superstars dont les contrats sont totalement décorrélés du reste de la ligue.
+
+```{r}
+q1_salaire <- quantile(nba_f$Salary, 0.25) # on se met au 25ème pourcentile.
+
+q3_salaire <- quantile(nba_f$Salary, 0.75)
+
+iqr_salaire <- IQR(nba_f$Salary)
+
+borne_inf <- q1_salaire - 1.5 * iqr_salaire
+
+borne_sup <- q3_salaire + 1.5 * iqr_salaire
+
+salaires_atypiques <- nba_f$Salary[nba_f$Salary < borne_inf | nba_f$Salary > borne_sup]
+
+nbr_slr_atypiques <- length(salaires_atypiques) # Taille du vecteur.
+
+cat("On va avoir un total de", nbr_slr_atypiques, "salaires atypiques. \n")
+
+cat("Ces salaires vont être : \n")
+
+salaires_atypiques
+```
+
+```{r}
+nb_total <- nrow(nba_f) # Récupère le nombre total de joueurs.
+
+pourcentage_stars <- (nbr_slr_atypiques / nb_total) * 100
+ #Donne la proportion de 'stars' dans la ligue.
+
+nb_equipes <- length(unique(nba_f$Team)) # Nombre total de franchises.
+stars_par_equipe <- nbr_slr_atypiques / nb_equipes
+#Donne la proportion de 'stars' par équipe.
+
+cat("Ces", nbr_slr_atypiques, "joueurs représentent", round(pourcentage_stars, 1), "% de la ligue.\n") # Affiche le pourcentage.
+cat("Soit une moyenne de", round(stars_par_equipe, 1), "stars par équipe.\n") # Affiche la moyenne par franchise.
+```
+Ces 51 joueurs perçoivent un salaire qui les qualifie d'outliers. Cette élite financière correspond aux "franchise players", les superstars chargées de mener leur équipe vers le titre. 
+Ce chiffre prend tout son sens lorsqu'on l'analyse à l'échelle de la ligue. En effet les joueurs sont répartis dans 30 équipes, ils représentent une moyenne de 1,7 joueur star par effectif. La distribution des salaires reflète donc parfaitement le modèle sportif de la ligue, structuré pour que chaque équipe puisse s'appuyer sur un à deux joueurs majeurs aux contrats exceptionnels.
+
+\newpage
+\section*{II. Analyse univarié de la variable qualitative Nationality :}
+\hrule 
+\vspace{0.4cm}
+
+```{r}
+nba_f %>%
+  count(Nationality) %>% # Compte le nombre de joueurs par pays.
+  top_n(10,n) %>% # Garde les 10 nationalités les plus représentées sur les n.
+  
+  ggplot(aes(x = reorder(Nationality, n), y = n)) + # Ordonne les pays par
+  # effectif croissant pour la lisibilité.
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() + # Aligne les barres horizontalement pour lire les noms de
+  # pays.
+  labs(
+    title = "Top 10 des nationalités en NBA",
+    x = "Pays", # Axe des ordonnées.
+    y = "Nombre de joueurs" # Axe des abscisses.
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Création du tableau de fréquences pour la variable Nationality.
+tableau_nat <- nba_f %>%
+  count(Nationality, name = "Effectif") %>% # On compte les effectifs.
+  
+  mutate(Frequence = Effectif / sum(Effectif), # Calcul de la fréquence.
+        `Pourcentage (%)` = round(Frequence * 100, 2)) %>% # % arrondi.
+  
+  arrange(desc(Effectif)) # On trie du plus présent au moins présent.
+
+kable(tableau_nat, # Tableau kabble de notre tableau de fréquence.
+      caption = "Répartition des joueurs par nationalité",
+      col.names = c("Nationalité", "Effectif", "Fréquence", "Pourcentage (%)"),
+      digits = 3)
+```
+De part le diagramme ainsi que par le tableau, on observe une nette surreprésentation des joueurs américains au sein de la ligue. Toutefois, bien que les joueurs étrangers soient numériquement minoritaires, on peut supposer qu'ils vont probablement constituer une certaine élite internationale qui va regrouper une part importante des stars.
+
+\newpage
+\section*{III. Analyse d’un lien entre variables quantitatives :}
+\hrule 
+\vspace{0.4cm}
+
+Dans une première partie, nous allons nous focaliser sur la relation entre la variable FP et le salaire (Salary) afin d'essayer de déceler un lien entre la performance sportive et la rémunération.
+
+### Contexte du FP, analyse univarié rapide :
+
+```{r}
+FP <- nba_f$FP
+Moyenne_FP <- mean(FP)
+Median_FP <- median(FP)
+Ecarttype_FP <- sd(FP)
+
+cat("Le score 'Fantasy' moyen est",Moyenne_FP,"\n")
+cat("Le score 'Fantasy' median est",Median_FP,"\n")
+cat("L'écart-type entre pour le score 'Fantasy' est",Ecarttype_FP,"\n")
+```
+L'analyse des scores Fantasy révèle aussi une distribution asymétrique vers la droite, où la moyenne est supérieure à la médiane. Cet écart indique que les performances d'une minorité de joueurs d'élite tirent la moyenne vers le haut, tandis que le joueur typique se situe autour de 1000 points.  
+
+De plus L'écart-type élevé souligne une forte hétérogénéité des performances au sein de la ligue, confirmant une grande disparité entre les joueurs qui vont jouer la grandes parties des matchs et ceux qui vont avoir un rôle de soutient.
+
+Appliquons le modèle de regression linéaire :
+
+```{r}
+modele_salary_fp <- lm(Salary ~ FP, data = nba_f)
+summary(modele_salary_fp)
+```
+Le modèle de régression linéaire montre effectivement une relation significative entre le score Fantasy et le salaire avec une p-value très faible. Le coefficient associé aux FP suggère que chaque point supplémentaire se traduit en moyenne par une hausse de salaire d'environ 9 200 dollars. Cependant, le coefficient de détermination (R-squared) de 0,41 révèle que la performance statistique n'explique que 41 % de la variance salariale.  
+
+En effet comme nous avons pu en parler auparavant, certains facteurs cruciaux, tels que l'ancienneté, le leadership ou encore le potentiel médiatique, influencent fortement la rémunération finale des joueurs. Il est important pour nous de garder un oeil extérieur et de ne pas seulement foncer sur les statistiques.
+
+```{r}
+ggplot(data = nba_f) + 
+  aes(x = FP, y = Salary) + # Score Fantasy en abscisse et le Salaire en ordonnée.
+  geom_point() + # Ajoute les points pour observer la distribution
+  # individuelle des joueurs.
+  geom_smooth(method = "lm", se = FALSE, color = "red", formula = y ~ x) +
+  # Trace la regréssion linéaire sans l'intervalle de confiance.
+  labs(
+    title = "Régression linéaire entre Salary et FP", 
+    x = "FP",  # Nom abscisse.
+    y = "Salary" # Nom ordonnée.
+  ) +
+  theme_minimal()
+```
+La régression linéaire confirme la corrélation positive entre la performance sur le terrain et la rémunération, tout en révélant une forte dispersion des données. La droite de tendance rouge montre que le salaire augmente globalement avec le score Fantasy, mais l'éloignement de nombreux points indique que le talent pur n'explique pas tout. 
+
+On observe notamment les stars qui vont être très productives situées bien au-dessus de la ligne, ainsi que des joueurs aux statistiques plus modestes mais bénéficiant de contrats élevés, illustrant l'influence de facteurs externes qu'on a cité juste avant. 
+
+Un dernier point d'analyse consiste à observer les joueurs situés en dessous de la droite, c'est-à-dire ceux qui affichent un score élevé tout en percevant un faible salaire. Ces joueurs sont principalement les 'rookies', de jeunes talents fraîchement arrivés dans la ligue qui ont besoin de faire leurs preuves avant de signer des plus gros contrats.
+
+```{r}
+# Sélection des variables quantitatives à analyser.
+donnees_cor <- nba_f %>%
+  select(Salary, FP, PTS, REB, AST, plus_minus, FGper, STL, BLK, Min, Age)
+
+#Calcule de la matrice de corrélation.
+matrice_cor <- cor(donnees_cor, use = "complete.obs")
+
+# Affichage de la matrice avec un kable.
+kable(round(matrice_cor, 2), 
+      caption = "Matrice des corrélations de Pearson")
+```
+
+La matrice de corrélation confirme que la NBA demeure un jeu de scoring, où la victoire dépend avant tout de la capacité à marquer plus que l'adversaire. Le salaire est ainsi prioritairement lié aux points (PTS) ainsi qu'au score Fantasy (FP), soulignant que le premier argument à la valorisation financière des joueurs va reposer sur leur efficacité offensive. Les statistiques défensives ou d'adresse pure ayant un impact bien moindre, le marché récompense clairement ceux qui portent l'attaque et dominent le tableau d'affichage.
+
+
+
+```{r}
+#Calcule l'écart entre le salaire réel et le salaire prédit par le modèle.
+nba_f$residus <- residuals(modele_salary_fp)
+
+# Génère les salaires théoriques en fonction du score Fantasy.
+nba_f$salary_hat <- predict(modele_salary_fp)
+
+# Affichage de ces nouvelles valeurs :
+head(nba_f %>% select(Salary, FP, salary_hat, residus))
+```
+
+
+```{r}
+ggplot(nba_f, aes(sample = residus)) +
+  geom_qq(color = "steelblue") + # Points générés de normalité.
+  geom_qq_line(color = "red") + #Ligne rouge pour la normalité.
+  # Labels :
+  labs(
+    title = "Analyse de la normalité des résidus avec Q-Q plot",
+    subtitle = "Les points représentent nos erreurs et la ligne rouge la répartition idéale.",
+    x = "Quantiles théoriques",
+    y = "Quantiles des résidus"
+  ) +
+  theme_minimal()
+```
+
+L’analyse du Q-Q plot révèle un décrochage majeur pour les hauts revenus, le modèle linéaire va avoir des difficultés à prédire avec précision le salaire des superstars. Ce constat démontre que la NBA suit une structure de récompense pas totalement linéaire, le passage de joueur solide à star de la ligue ne se traduit pas par une simple augmentation proportionnelle, mais par un saut financier exceptionnel qui s'affranchit des statistiques de performance classiques. Pour conclure, on peut dire qu'au sommet de la hiérarchie, le prestige et le statut de star l'emportent sur la logique mathématique.
+
+\newpage
+\section*{IV. Analyse multivarié entre deux variables qualitative :}
+\hrule 
+\vspace{0.4cm}
+
+On a choisi ici d'analyser la variable de tranche d'âge avec celle de l'impact sur le terrain lors d'un match tout en exigeant une certaine exigence de niveau pour les joueurs.
+
+```{r}
+# Crée un tableau de contingence croisant les tranches d'âge et l'impact.
+# Le filtre [FP > mean(FP)] permet de ne garder que les joueurs qui vont
+# être pertinents à l'analyse.
+tableau_quali <- table(
+  nba_f$tranche_age[nba_f$FP > mean(nba_f$FP)], # Les lignes vont être les tranches d'âge.
+  nba_f$plusminus[nba_f$FP > mean(nba_f$FP)]   # Les colonnes vont être 
+  # leur impact par leur présence sur le terrain.
+)
+
+tableau_quali
+```
+
+```{r}
+ggplot(
+  nba_f %>% filter(FP > Moyenne_FP) # On pose la même condition.
+) +
+  aes(x = tranche_age, fill = plusminus) + # Pour chauqe tranche d'âge
+  # on remplit avec les nombres de plusminus.
+  geom_bar(position = "fill") + # On prend les proportions et pas les 
+  # effectifs.
+  labs(
+    title = "Répartition du ratio victoire/défaite selon la tranche d'âge",
+    subtitle = "Joueurs avec score Fantasy supérieur à la moyenne",
+    x = "Tranche d'âge",
+    y = "Proportion",
+    fill = "Impact avec le +/-"
+  ) +
+  scale_y_continuous(labels = scales::percent) + # Formate l'axe Y en
+  # pourcentages de 0% à 100%.
+  theme_minimal()
+```
+
+L’analyse globale de ces données met en lumière la dualité du marché de la NBA, une ligue régie par le spectacle offensif, mais où la victoire reste aussi une question de maturité. 
+
+Cette logique statistique rencontre ses limites avec les superstars, l'étude du binôme âge/impact révèle que si le talent statistique avec le score Fantasy est précoce, l'efficacité collective avec le Plus/Minus (+/-) est un luxe qui s'acquiert avec le temps. Les jeunes joueurs avec des bons score FP ne vont pas forcément avoir un impact global qui va résulter sur la victoire de l'équipe tandis que les vétérans, plus rentables, font réellement basculer les matchs. 
+
+En somme, les jeunes talents produisent des statistiques individuelles élevées mais l'impact collectif positif demeure l'apanage des vétérans, confirmant que si le talent se paie, l'expérience fait gagner.
+
+\newpage
+\section*{V. Analyse multivarié entre variable qualitatif et quantitatif :}
+\hrule 
+\vspace{0.4cm}
+
+Pour cette partie, nous allons analyser le salaire selon l'âge, et en particulier à travers différentes tranches d'âge qui vont, entre autres, représenter les différentes étapes qu'un joueur professionnel de basket-ball rencontre dans sa carrière.
+
+```{r}
+tableau_age_salaire <- nba_f %>%
+  group_by(tranche_age) %>% # On regroupe selon les tranches d'âge.
+  # Et donc pour chaque groupe :
+  summarise(
+    Effectif = n(), # Compte le nombre de joueurs dans chaque tranche.
+    Salaire_moyen = mean(Salary), # Calcule du salaire moyen pour chacun.
+    Salaire_median = median(Salary), # Pareil avec le salaire median.
+    Ecart_type = sd(Salary) # Ainsi qu'avec l'écart-type
+  )
+
+# Génération du tableau au propre :
+kable(tableau_age_salaire,
+      caption = "Salaire selon la tranche d'âge")
+```
+
+
+
+```{r}
+ggplot(nba_f) +
+  aes(x = tranche_age, y = Salary, fill = tranche_age) +
+  # On met les différentes tranches d'âge en abscisse et les salaires en ordonnée.
+  
+  geom_boxplot() + # Dessin des boxplots.
+    labs( # Ajout des différents titres.
+    title = "Distribution des salaires selon la tranche d'âge",
+    x = "Tranche d'âge",
+    y = "Salaire"
+  ) +
+  theme_minimal()
+```
+ 
+On observe que les carrière en NBA peuvent être différencié sous 4 tranches d'âge :
+
+L'entrée dans la ligue, pour ceux entre 18 et 23 ans, se fait avec des salaires relativement bas et homogènes, dictés par les contrats 'rookies'. Ce qui se passe, c'est qu'on va donner une période d'essai aux jeunes joueurs avec des salaires faibles pour ensuite, potentiellement, pouvoir passer au deuxième contrat lors de la seconde tranche, ou simplement les couper s'ils ne sont pas au niveau.
+
+La deuxième période est le premier grand clivage. Il apparaît pour les joueurs entre 23 et 28 ans. Bien que la médiane reste modeste, l'explosion des valeurs aberrantes sur le graphique et le doublement de l'écart-type signalent l'émergence des premières superstars décrochant des contrats massifs.
+
+La tranche des 28-33 ans représente le véritable âge d'or financier de la ligue. C'est le seul moment où le salaire médian décolle réellement, la boîte verte s'élevant nettement, prouvant que la majorité des joueurs jouant encore à cet âge sécurisent ici le contrat de leur vie.
+
+Enfin, le dernier constat qu'on peut voir concerne les vétérans de 33-38 ans et les super vétérans de 38-43ans, qui sont marqués par une dichotomie extrême, on a que la médiane s'effondre, en effet à cet âge beaucoup acceptent des contrats minimums pour rester en NBA, mais paradoxalement, le salaire moyen (16,4 millions) et l'écart-type (18,3 millions) atteignent leurs sommets absolus. Cet étirement spectaculaire de la boîte bleue en particulier démontre qu'en fin de carrière, la "classe moyenne" disparaît au profit d'une fracture totale entre des joueurs de complément sous-payés et une poignée de légendes intouchables qui monopolisent la masse salariale.
+
+
+```{r}
+ggplot(data = nba_f) + 
+  aes(x = FP, y = Salary, color = tranche_age) + 
+  # Place le score Fantasy en abscisse, le salaire en ordonnée, et
+  # attribue une couleur par tranche d'âge.
+  
+  geom_point() + # Affiche chaque joueur sous forme de point.
+  
+  geom_smooth(method = "lm", se = FALSE, formula = y ~ x) + 
+  # Trace une droite de tendance par tranche d'âge.
+  
+  labs(
+    title = "Régression linéaire entre Salary et FP selon la tranche d'âge",
+    x = "FP",
+    y = "Salary", 
+    color = "Tranche d'âge" 
+  ) +
+  theme_minimal()
+```
+
+Ce graphe synthétise parfaitement le cycle de vie financier en NBA. En particulier on y voit un effet d'essui-glace. La pente des salaires s'élève d'abord avec l'âge, elle va être très basse pour les débutants en rouge bridés par leurs contrats puis elle passe par le kaki puis le vert clair avant d'atteindre son paroxysme avec les vétérans confirmés en bleu où chaque point statistique se paie au prix fort. 
+
+Enfin, passé ce sommet, le mouvement s'inverse et la pente redescend pour les doyens en violet, illustrant ainsi le déclin de la valeur marchande en fin de carrière. Cette rotation des droites confirme que si le talent est le moteur, l'âge est le levier qui définit le coût réel de la performance sur le marché.
+
+\newpage
+\section*{VI. L'Analyse en Composantes Principales :}
+\hrule 
+\vspace{0.4cm}
+
+Chargement des librairy pour l'analyse de l'ACP. 
+
+```{r}
+pacman::p_load(broom, ggfortify, corrr)
+```
+
+On garde que les variables quantitatives :
+
+```{r}
+donnees_acp <- nba_f %>%
+  select(Salary, FP, PTS, REB, AST, STL, BLK, TOV, Min, Age, plus_minus, FGper)
+
+summary(donnees_acp)
+```
+Visualisation rapide des relations entre les variables avant de lancer l' ACP :
+
+```{r, warning=FALSE, message=FALSE}
+#On veut juste enlever le message pour le pdf.
+
+donnees_acp %>%
+  corrr::correlate(use = "pairwise.complete.obs", method = "pearson", quiet = TRUE) %>%  
+  # Calcule la matrice de corrélation de Pearson. L'option
+  # pairwise.complete.obs permet de ne pas bloquer le calcul s'il manque
+  # quelques données.
+  
+  corrr::rplot() +
+  # Génèration d'un graphique où les corrélations sont représentées par
+  # des cercles de couleurs et de tailles différentes selon l'intensité.
+  
+  labs(title = "Matrice des corrélations entre les variables de l'ACP") +
+  theme_minimal()
+```
+
+L'absence de cercles rouges confirme qu'aucune variable n'évolue en sens opposé d'une autre de manière significative. Au basket, la performance est un cercle vertueux, le talent appelle le temps de jeu, qui génère mécaniquement du volume dans toutes les catégories statistiques. Même les erreurs (TOV) progressent avec la productivité, car elles sont le propre des joueurs qui portent le ballon. L'ACP va donc principalement chercher à synthétiser ce "grand bloc bleu" de la performance globale.
+
+
+```{r}
+pco_nba <- prcomp(donnees_acp, center = TRUE, scale. = TRUE)
+#calcule des composantes principales et mise sur pied d'égalité.
+
+summary(pco_nba) # On regarde les "poids" des nouvelles dimensions créees.
+```
+
+```{r}
+var_exp_nba <- tidy(pco_nba, matrix = "pcs")
+
+kable(
+  var_exp_nba,
+  digits = 4,
+  col.names = c("Composante", "Écart-type", "Variance expliquée", "Variance cumulée"),
+  caption = "Variance expliquée par les composantes principales"
+)
+```
+
+En regardant la colonne de variance cumulée, on voit qu'avec seulement les 3 premières composantes PC1, PC2 et PC3, on capture 77,5 % de l'information totale contenue dans nos 12 variables d'origine.
+On voit effectivement que ce schéma va se reproduire sur le Screeplot :
+
+```{r}
+var_exp_nba %>% #
+  ggplot(aes(x = PC)) + # L'axe des abscisses va déterminer les PCs.
+  
+  geom_col(aes(y = percent), fill = "steelblue", alpha = 0.8) + # Dessine
+  # les barres bleues représentant la part de variance expliquée par
+  # chaque PC seule.
+  
+  geom_line(aes(y = cumulative), color = "red", linewidth = 1) + 
+  # Ajoute la courbe rouge qui nous donne le cumulé.
+  
+  geom_point(aes(y = cumulative), color = "red", size = 2) + 
+  # Place des points rouges sur la courbe pour bien marquer chaque étape.
+  
+  geom_hline(yintercept = 0.8, linetype = "dashed", color = "grey50") + 
+  # Trace une ligne pointillée à 80 % pour le seuil d'informations 
+  # suffisantes.
+  
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) + 
+  # Transforme les chiffres de l'axe Y en pourcentages.
+  
+  scale_x_continuous(breaks = 1:nrow(var_exp_nba)) + 
+  # Force l'affichage de chaque numéro de PC sur l'axe X.
+  
+  labs(
+    title = "Screeplot de l'ACP", 
+    subtitle = "Barres : variance individuelle | Courbe rouge : variance cumulée",
+    x = "Composante principale", 
+    y = "Part de variance"
+  ) +
+  theme_minimal() 
+```
+
+```{r}
+coord_var <- cor(donnees_acp, pco_nba$x) %>% 
+  # Calcule la corrélation entre les variables originales et les nouveaux
+  # axes qui vont être ceux des PCs.
+  
+  as.data.frame() %>% # Transformation en data frame pour ggplot.
+  
+  tibble::rownames_to_column(var = "variable") 
+  # Récupère les noms des stats (PTS, REB, etc.) pour pouvoir les
+  # afficher sur le graphique.
+
+# Création des cercles
+
+ggplot(coord_var, aes(x = PC1, y = PC2)) + 
+  #On se focalise sur PC1 et PC2 pour le premier cercle
+  
+  # Cercle unité :
+  annotate(
+    "path",
+    x = cos(seq(0, 2 * pi, length.out = 300)),
+    y = sin(seq(0, 2 * pi, length.out = 300)),
+    color = "grey60",
+    linetype = "dashed"
+  ) +
+  # Axes :
+  geom_hline(yintercept = 0, color = "grey70") +
+  geom_vline(xintercept = 0, color = "grey70") +
+  # Flèches :
+  geom_segment(
+    aes(x = 0, y = 0, xend = PC1, yend = PC2),
+    arrow = arrow(length = unit(0.22, "cm")),
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  # Labels :
+  geom_text(
+    aes(label = variable), 
+    hjust = ifelse(coord_var$PC1 >= 0, -0.1, 1.1),
+    size = 3.5
+  ) +
+  coord_fixed() +
+  xlim(-1.15, 1.15) +
+  ylim(-1.15, 1.15) +
+  labs(
+    title = "Cercle des corrélations",
+    subtitle = "Plan factoriel PC1 - PC2",
+    x = paste0("PC1 (", round(var_exp_nba$percent[1] * 100, 1), "%)"),
+    y = paste0("PC2 (", round(var_exp_nba$percent[2] * 100, 1), "%)")
+  ) +
+  theme_minimal()
+```
+
+Interprétation de PC1 : L'axe du Volume et de l'Activité : 
+
+La première composante, qui capte 56 % de la variance totale, représente la productivité brute du joueur. Comme on le voit sur le cercle, toutes les variables de "comptage" (MIN, PTS, FP, AST) sont fortement corrélées et pointent vers la gauche jusqu'au bord du cercle. Un joueur avec un score élevé sur cet axe est un moteur central de son équipe qui passe énormément de temps sur le terrain. C'est l'axe de l'omniprésence offensive, où l'on retrouve également la corrélation logique entre le scoring et les pertes de balle (TOV) : plus un joueur porte le ballon pour produire, plus son déchet statistique augmente.
+
+Interprétation de PC2 : L'axe de la Spécialisation et du Statut :
+
+La seconde composante, bien que plus modeste à 11,4 %, est cruciale pour distinguer le style de jeu et le profil de carrière. Elle crée une opposition verticale entre deux mondes :
+
+Vers le haut on va avoir un certain type de joueurs qui vont jouer plus défensivement. On y trouve les variables d'efficacité propre à ce style de jeu avec le pourcentage au tir (FG%), les contres (BLK) et les rebonds (REB).
+Vers le bas : C'est le pôle de l'expérience et du statut financier. Cet axe est tiré par l'Age et le Salary.
+
+En résumé, PC2 permet de différencier deux joueurs aux même style défensif, un jeune joueur avec celui d'un vétéran au salaire élevé dont l'impact se mesure davantage par la maturité que par les qualités athlétiques pures.
+
+
+```{r}
+coord_var <- cor(donnees_acp, pco_nba$x) %>% 
+  # Calcule la corrélation entre les variables originales et les nouveaux
+  # axes qui vont être ceux des PCs.
+  
+  as.data.frame() %>% # Transformation en data frame pour ggplot.
+  
+  tibble::rownames_to_column(var = "variable") 
+  # Récupère les noms des stats (PTS, REB, etc.) pour pouvoir les
+  # afficher sur le graphique.
+
+
+#Formule du TP pour faire les cercles :
+
+ggplot(coord_var, aes(x = PC1, y = PC3)) + 
+  #On se focalise sur PC1 et PC2 pour le premier cercle
+  
+  # Cercle unité :
+  annotate(
+    "path",
+    x = cos(seq(0, 2 * pi, length.out = 300)),
+    y = sin(seq(0, 2 * pi, length.out = 300)),
+    color = "grey60",
+    linetype = "dashed"
+  ) +
+  # Axes :
+  geom_hline(yintercept = 0, color = "grey70") +
+  geom_vline(xintercept = 0, color = "grey70") +
+  # Flèches :
+  geom_segment(
+    aes(x = 0, y = 0, xend = PC1, yend = PC3),
+    arrow = arrow(length = unit(0.22, "cm")),
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  # Labels :
+  geom_text(
+    aes(label = variable),
+    hjust = ifelse(coord_var$PC1 >= 0, -0.1, 1.1),
+    size = 3.5
+  ) +
+  coord_fixed() +
+  xlim(-1.15, 1.15) +
+  ylim(-1.15, 1.15) +
+  labs(
+    title = "Cercle des corrélations",
+    subtitle = "Plan factoriel PC1 - PC3",
+    x = paste0("PC1 (", round(var_exp_nba$percent[1] * 100, 1), "%)"),
+    y = paste0("PC3 (", round(var_exp_nba$percent[3] * 100, 1), "%)")
+  ) +
+  theme_minimal()
+```
+La troisième composante est l'axe de l'expérience et de la gagne :
+
+Au contraire des autres axes qui regardent surtout les statistiques individuelles, celui-ci se concentre sur l'utilité du joueur pour son équipe. On y voit deux choses importantes monter ensemble : l'Âge et le +/- (l'impact sur le score).
+En clair, PC3 sert à identifier les vétérans qui vont faire en sorte que l'équipe gagne avant tout. Ce sont des joueurs qui ne marquent pas forcément énormément de points, mais qui, grâce à leur maturité, font que leur équipe joue mieux.
+
+
+```{r}
+coord_var <- cor(donnees_acp, pco_nba$x) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "variable")
+
+ggplot(coord_var, aes(x = PC2, y = PC3)) +
+  annotate(
+    "path",
+    x = cos(seq(0, 2 * pi, length.out = 300)),
+    y = sin(seq(0, 2 * pi, length.out = 300)),
+    color = "grey60",
+    linetype = "dashed"
+  ) +
+  geom_hline(yintercept = 0, color = "grey70") +
+  geom_vline(xintercept = 0, color = "grey70") +
+  geom_segment(
+    aes(x = 0, y = 0, xend = PC2, yend = PC3),
+    arrow = arrow(length = unit(0.22, "cm")),
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  geom_text(
+    aes(label = variable),
+    hjust = ifelse(coord_var$PC2 >= 0, -0.1, 1.1),
+    size = 3.5
+  ) +
+  coord_fixed() +
+  xlim(-1.15, 1.15) +
+  ylim(-1.15, 1.15) +
+  labs(
+    title = "Cercle des corrélations",
+    subtitle = "Plan factoriel PC2 - PC3",
+    x = paste0("PC2 (", round(var_exp_nba$percent[2] * 100, 1), "%)"),
+    y = paste0("PC3 (", round(var_exp_nba$percent[3] * 100, 1), "%)")
+  ) +
+  theme_minimal()
+```
+
+Pour finir, ce plan PC2-PC3 évacue la question du volume pour se concentrer sur l'identité et l'utilité réelle du joueur. On y distingue deux pôles majeurs :
+
+Le profil défensif du PC2 : Avec, à droite, l'efficacité au tir (FG%), les rebonds (REB) et les contres (BLK).
+
+La maturité gagnante du PC3 : En haut, l'Âge et le +/- grimpent ensemble, prouvant que l'impact collectif est souvent lié à l'expérience. Le Salary suit cette tendance, montrant que la ligue rémunère cette sagesse.
+
+En résumé, ce graphique ne montre plus qui marque le plus, mais oppose les profils physiques aux profils stratégiques.
+
+
+
+```{r}
+loadings_nba <- tidy(pco_nba, matrix = "v") %>% 
+  # Extraction des poids des variables.
+  filter(PC <= 2) %>% # Sélection des deux premiers axes.
+  pivot_wider( # Passage du format long au format large.
+    names_from = PC, 
+    values_from = value, 
+    names_prefix = "PC" # Renomme les colonnes en "PC1" et "PC2"
+  )
+
+kable(
+  loadings_nba, 
+  digits = 4, # Arrondi à 4 décimales pour la lisibilité.
+  caption = "Coordonnées des variables sur les deux premières composantes"
+)
+```
+
+```{r}
+loadings_nba <- tidy(pco_nba, matrix = "v") %>% 
+  # Extraction des poids des variables.
+  filter(PC %in% c(1, 3)) %>% # Sélection des PC 1 et 3 uniquement.
+  pivot_wider( # Passage du format long au format large.
+    names_from = PC, 
+    values_from = value, 
+    names_prefix = "PC" # Renomme les colonnes en "PC1" et "PC3"
+  )
+
+kable(
+  loadings_nba, 
+  digits = 4, # Arrondi à 4 décimales pour la lisibilité.
+  caption = "Coordonnées des variables sur les composantes 1 et 3"
+)
+```
+
+
+
+```{r}
+# On fusionne les résultats de l'ACP (pco_nba) avec le tableau de données
+# initial (nba_f)
+scores_nba <- augment(pco_nba, data = nba_f)
+
+head(scores_nba)
+```
+
+```{r}
+scores_nba %>%
+  # On regarde pour PC1 et PC2.
+  ggplot(aes(x = .fittedPC1, y = .fittedPC2)) +
+  
+  # On ajuste les points selon le salaire (taille, couleurs,..).
+  geom_point(aes(color = Salary), alpha = 0.8, size = 2) +
+  scale_color_viridis_c(labels = scales::label_dollar()) +
+  
+  # Ajout d'axes de référence horizontale puis verticale.
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey70") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey70") +
+  
+  # On force un espect des proportions (1 unité en X = 1 unité en Y).
+  coord_fixed() +
+  
+  # Labels :
+  labs(
+    title = "Projection des joueurs dans le plan factoriel",
+    subtitle = "Couleur : salaire annuel",
+    x = paste0("PC1 (", round(var_exp_nba$percent[1] * 100, 1), "%)"),
+    y = paste0("PC2 (", round(var_exp_nba$percent[2] * 100, 1), "%)"),
+    color = "Salaire"
+  ) +
+  theme_minimal()
+```
+
+La projection des joueurs dans le plan factoriel révèle une structuration forte de la ligue autour de deux axes principaux. Le premier axe, agit comme un indicateur de l'impact global et du volume de statistiques. On observe une corrélation visuelle évidente entre cet axe et la rémunération. Les joueurs aux salaires les plus élevés, représentés par les teintes jaunes et vert clair, se concentrent quasi exclusivement sur la partie gauche du graphique. À l'inverse, la partie droite est dominée par des points violets, correspondant aux salaires les plus bas et à un volume de jeu moindre.
+
+Sur le graphique de projection, la PC2 permet de ventiler la masse des joueurs. On remarque que les joueurs les mieux payés ont tendance à se situer dans la moitié inférieure de l'axe. Cela suggère que la valeur marchande dans cet échantillon est plus fortement associée aux profils de créateurs d'élite offesinf et de vétérans confirmés qu'aux profils de défenseurs purs.
+
+\newpage
+\section*{VII. Analyse de classification non supervisée :}
+\hrule 
+\vspace{0.4cm}
+
+Chargement des librairy pour cette partie : 
+
+```{r}
+pacman::p_load(factoextra, cluster)
+```
+
+On sélectionne à nouveau que les variables quantitatives.
+
+```{r}
+donnees_kmeans <- nba_f %>%
+  select(Salary, FP, PTS, REB, AST, STL, BLK, TOV, Min, Age, plus_minus, FGper)
+```
+
+On centre et réduit nos données grâce à scale.
+
+```{r}
+donnees_kmeans_scaled <- scale(donnees_kmeans) 
+```
+
+On cherche le nombre de clusters qu'il nous faut :
+
+```{r}
+set.seed(123) # Implémentation de l'aléatoire.
+
+# Calcul et visualisation du nombre optimal de clusters
+fviz_nbclust(
+  donnees_kmeans_scaled, # Utilisation des données centrées-réduites
+  kmeans, # Algorithme "kmeans" utilisé
+  method = "wss"  # Méthode "Within Sum of Squares"
+) +
+  labs(
+    title = "Méthode wss / du coude",
+    subtitle = "Choix du nombre de clusters",
+    x = "Nombre de clusters (k)",
+    y = "Inertie intra-classe totale"
+  ) +
+  theme_minimal() 
+```
+
+D'après l'analyse visuelle, le coude se situe à k=3. Nous allons donc utiliser 3 clusters pour représenter notre jeu de données.
+
+```{r}
+set.seed(123)
+
+res_km <- kmeans(
+  donnees_kmeans_scaled, # Utilise les données centrées-réduites pour
+  # équilibrer le poids des variables.
+  centers = 3, # Applique le regroupement en 3 clusters.
+  nstart = 25  # On tente 25 configurations de départ différentes pour
+  # garantir la stabilité du résultat.
+)
+
+res_km
+```
+On associe nos groupes aux joueurs :
+
+```{r}
+nba_kmeans <- nba_f %>%
+  mutate(cluster = as.factor(res_km$cluster))
+```
+
+```{r}
+profil_clusters <- nba_kmeans %>%
+  group_by(cluster) %>% # On va différencier selon chaque clusters.
+  summarise( #On va analyser moyennes pour toutes nos variables :
+    Effectif = n(),
+    Salaire_moyen = mean(Salary, na.rm = TRUE),
+    Age_moyen = mean(Age, na.rm = TRUE),
+    FP_moyen = mean(FP, na.rm = TRUE),
+    Points_moyens = mean(PTS, na.rm = TRUE),
+    Rebonds_moyens = mean(REB, na.rm = TRUE),
+    Passes_moyennes = mean(AST, na.rm = TRUE),
+    Interceptions_moyennes = mean(STL, na.rm = TRUE),
+    Contres_moyens = mean(BLK, na.rm = TRUE),
+    Balles_perdues_moyennes = mean(TOV, na.rm = TRUE),
+    Minutes_moyennes = mean(Min, na.rm = TRUE),
+    Plus_minus_moyen = mean(plus_minus, na.rm = TRUE),
+    FG_moyen = mean(FGper, na.rm = TRUE)
+  )
+
+kable(
+  profil_clusters,
+  digits = 2,
+  caption = "Profil moyen des clusters obtenus par k-means"
+)
+```
+
+A voir sur le fichier Rmd car pour 19 variables ce tableau ne va pas être très beau, désolé.
+
+Cette segmentation met en évidence une hiérarchie sportive et financière très marquée, divisant la ligue en trois catégories distinctes. 
+
+Le troisième groupe, bien que le moins nombreux avec seulement 74 joueurs, constitue l'élite absolue. Ces athlètes perçoivent les salaires les plus élevés, dépassant les 27 millions de dollars en moyenne. De plus ce sont les seuls à afficher un impact collectif positif sur le terrain. Ils vont être les piliers des franchises, cumulant temps de jeu massif et statistiques deux fois supérieures à celles des autres groupes dans presque toutes les catégories.
+
+Le premier groupe rassemble 190 joueurs qui forment le cœur des rotations régulières. Ce sont des titulaires ou des remplaçants solides qui gagnent environ 10 millions de dollars. S'ils passent beaucoup de temps sur le terrain, leur apport statistique est moitié moindre que celui des stars et leur influence globale sur le score reste négative. 
+
+Enfin, le deuxième groupe représente la plus grande partie de l'effectif avec 200 joueurs de complément ou de fin de banc. Disposant des salaires les plus bas et d'un temps de jeu très restreint, leur contribution reste marginale et leur présence sur le terrain est souvent limitée à des séquences courtes, marquant une rupture nette avec le reste de la ligue.
+
+
+```{r}
+# Fusionne l'ACP avec les données segmentées par k-means.
+scores_clusters <- augment(pco_nba, data = nba_kmeans)
+
+# x et y sont les axes de l'ACP et chaque clusters a sa couleur.
+ggplot(scores_clusters, aes(x = .fittedPC1, y = .fittedPC2, color = cluster)) +
+  
+  # Chaque joueur est un point + on met de la transparence.
+  geom_point(alpha = 0.8, size = 2) +
+  
+  # Ajout des lignes y = 0 et x = 0 dans le plan.
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey70") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey70") +
+  
+  # Labels :
+  labs(
+    title = "Projection des clusters sur le plan factoriel de l'ACP",
+    subtitle = "Classification k-means des joueurs NBA",
+    x = paste0("PC1 (", round(var_exp_nba$percent[1] * 100, 1), "%)"), 
+    # Affiche la variance expliquée par l'axe 1.
+    y = paste0("PC2 (", round(var_exp_nba$percent[2] * 100, 1), "%)"), 
+    # Affiche la variance expliquée par l'axe 2.
+    color = "Cluster" # Titre de la légende pour les couleurs.
+  ) +
+  theme_minimal()
+```
+
+Cette projection confirme que la structure de la ligue est principalement dictée par le volume de performance, représenté par le premier axe horizontal qui porte la majorité de l'information. Le groupe bleu, situé à l'extrême gauche, isole clairement l'élite statistique de la NBA, regroupant les joueurs ayant l'impact le plus massif et les responsabilités les plus lourdes sur le terrain. 
+
+Au centre, le groupe rouge représente la classe moyenne productive, composée des titulaires réguliers qui assurent l'équilibre des rotations de chaque équipe. 
+
+Enfin, le groupe vert à droite rassemble les joueurs de complément dont l'apport chiffré est plus modeste. 
+
+On remarque que la séparation entre ces trois catégories se fait de manière très nette le long de l'axe de la performance, tandis que l'axe vertical continue de distinguer les profils techniques, comme les intérieurs en haut et les créateurs en bas, au sein de chaque niveau de talent. 
+Par ailleurs on peut aussi différencier nos deux types de vétérans situés en bas du plan factoriel : à gauche, les leaders de performance qui cumulent expérience et impact statistique majeur et à droite, les mentors de vestiaire dont l'utilité repose sur la transmission et l'encadrement plutôt que sur la production brute en match.
+
+
+```{r}
+# Génère automatiquement une visualisation des clusters.
+fviz_cluster(
+  res_km, # Contient les résultats du k-means.
+  data = donnees_kmeans_scaled, 
+  geom = "point", # Affiche les joueurs sous forme de points.
+  ellipse.type = "convex" # Trace un polygone autour de chaque groupe.
+) +
+  # Labels :
+  labs(
+    title = "Classification des joueurs NBA par k-means",
+    subtitle = "Données centrées-réduites"
+  ) +
+  theme_minimal()
+```
+
+La représentation par enveloppes convexes souligne la force de la segmentation en montrant trois territoires bien délimités qui ne se chevauchent pratiquement pas. 
+
+L'étalement vertical à l'intérieur de chaque polygone témoigne de la diversité des styles de jeu subsistant au sein d'un même niveau de talent, prouvant que chaque catégorie de performance regroupe des profils techniques variés. La netteté de ces frontières géométriques démontre que l'algorithme a identifié des ruptures réelles et cohérentes dans la structure statistique des effectifs.
+
+\newpage
+\section*{Conclusion :}
+\hrule 
+\vspace{0.4cm}
+
+À travers cette analyse économétrique de la saison NBA 2024-2025, nous avons exploré la relation entre les performances statistiques et la rémunération des joueurs. Les résultats obtenus permettent de nuancer la question initiale. En effet les statistiques vont représenter la valeur d'un joueur, mais pas forcément son prix.
+
+La NBA fonctionne sur deux économies parallèles. En effet, pour la majorité des joueurs, les statistiques sont déterminantes, plus on produit, plus on gagne. Cependant au sommet, cette logique linéaire s'effondre. Le passage de titulaire solide à superstar n'est pas graduel, c'est un saut qualitatif où l'expérience, le prestige et la projection médiatique dominent les chiffres bruts.
+
+Le problème fondamental est que les statistiques mesurent ce qu'un joueur a fait, pas ce qu'il représente. Les vétérans bien payés ne le sont pas malgré des stats modestes, mais parce que ils ont accumulé suffisamment de preuves statistiques au cours des saisons précédentes pour mériter le statut de star. Notre ACP l'a montré, le talent statistique précoce des jeunes joueurs ne se traduit pas en impact collectif positif, l'expérience va aussi faire gagner.
+
+La distribution salariale pyramidale ne résulte donc pas d'une valorisation erratique du marché, mais d'une structure cohérente où les statistiques tracent le cadre général tandis que d'autres dimensions économiques et culturelles affinent le prix final. Les données ne mentent pas, elles disent simplement qu'elles ne disent pas tout.
+
+
+
+
+
+
+
+
+
+
+
+
