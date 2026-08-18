@@ -78,7 +78,11 @@ nba <- inner_join(stats, salaires, by = "Player")
 Aperçu :
 
 ```{r}
-head(nba)
+# Affichage propre des 6 premières lignes et des 6 premières colonnes
+kable(
+  head(nba[, 1:10]), # On restreint pour la clareté car nous avons beaucoup de features.
+  caption = "Aperçu des premières lignes de la base"
+)
 ```
 
 On va chercher à voir s'il y a des valeurs manqantes :
@@ -88,40 +92,24 @@ nombre_na <- sum(is.na(nba))
 print(paste("Nombre de valeurs manquantes :", nombre_na))
 ```
 
-Vue globale sur nos features :
-
-```{r}
-summary(nba)
-```
-
-
-
 Nettoyage de la base :
 
 ```{r}
 nba1 <- nba %>%
-  distinct() %>% # Suppressions des doublons parfaits.
-  distinct(Player, .keep_all = TRUE) %>% # On enlève les joueurs en
-  # double en gardant la première occurence.
-  
-  # Pour la colonne Salary il faut enlever les signes $ et les virgules, 
-  # on va donc utiliser gsub("[\\$,]", "", Salary) qui va remplacer les $
-  # et les virgules par du vide. De plus on va aussi utilise
-  # as.numeric() afin de convertir le texte en nombre.
-  
+  distinct() %>% # Suppression des doublons parfaits de lignes
+  distinct(Player, .keep_all = TRUE) %>% # Conservation de la première occurrence pour chaque joueur unique
+ 
+  # Nettoyage et conversion numérique du salaire (suppression des symboles $ et des virgules)
   mutate(Salary = as.numeric(gsub("[\\$,]", "", Salary))) %>%
   
-  # On nettoye les colonnes d'équipes en double en supprimant la colonne
-  # Team.y.
-  select(-Team.y) %>%
+  select(-Team.y) %>% # Suppression de la colonne d'équipe en double issue de la jointure
   
-  rename(Team = Team.x) # Et on renomme Team.x en simplement Team.
+  rename(Team = Team.x) # Renommage propre de la colonne d'équipe restante
 
-head(nba1)
+# Vérification finale de l'absence de valeurs manquantes après le nettoyage
 
-# On revérifie pour les valeurs manquantes au cas ou.
 nombre_na <- sum(is.na(nba1))
-cat("Nombre de valeurs manquantes :", nombre_na,"\n")
+cat("Nombre de valeurs manquantes :", nombre_na, "\n")
 ```
 
 On fait maintenant notre grande sélection des données qu'on vous présente dans la partie "Descriprion des données" qui vient juste après.
@@ -202,8 +190,38 @@ nba_f <- nba1 %>% # On stocke le résultat dans un nouvel objet "nba_f".
 options(scipen = 999) # On va étudier des salaires qui se comptent en millions donc on facilite d'entrée la lecture
 #  après avoir enlever les virgules et les "$".
 
-head(nba_f)
+# On prend que le début
+apercu_nba_f <- head(nba_f)
+
+# Transposition (on enlève la colonne Player pour ne pivoter que les valeurs)
+apercu_transp_f <- as.data.frame(t(apercu_nba_f[, -1]))
+
+# Attribution des noms de joueurs en en-têtes de colonnes
+colnames(apercu_transp_f) <- apercu_nba_f$Player
+
+# Ajout du nom des variables dans une colonne dédiée sur le côté gauche
+apercu_transp_f$Variable <- rownames(apercu_transp_f)
+
+# Affichage esthétique du tableau vertical avec kable
+kable(
+  apercu_transp_f %>% select(Variable, everything()), 
+  row.names = FALSE, 
+  caption = "Aperçu des nouvelles variables créées pour la base finale"
+)
 ```
+
+Petit points statistiques sur les features qu'on va le plus utiliser :
+
+```{r}
+st(
+  nba1 %>% select(Age, Salary, GP, Min, FP, PTS, REB, AST), 
+  out = "kable", # Force la sortie en format kable pour le PDF
+  title = "Résumé statistique des variables quantitatives",
+  labels = c("Âge", "Salaire", "Matchs joués", "Minutes", "Score Fantasy", "Points", "Rebonds", "Passes")
+)
+```
+
+
 
 \newpage
 \section*{Description des données :}
@@ -313,9 +331,9 @@ Salaire_moyen <- mean(salaire) # On calcule le salaire moyen.
 Salaire_median <- median(salaire) # On trouve le salaire median.
 Salaire_ecarttype <- sd(salaire) # On mesure l'écart-type.
 
-cat("Le salaire moyen dans la ligue va être :", Salaire_moyen, "millions de dollars. \n")
-cat("Le salaire médian dans la ligue va être :", Salaire_median,"millions de dollars. \n")
-cat("L'écart-type entre les salaires dans la ligue va être de :", Salaire_ecarttype, "millions de dollars.\n")
+cat("Le salaire moyen dans la ligue va être :", Salaire_moyen, "dollars. \n")
+cat("Le salaire médian dans la ligue va être :", Salaire_median,"dollars. \n")
+cat("L'écart-type entre les salaires dans la ligue va être de :", Salaire_ecarttype, "dollars.\n")
 ```
 
 On remarque immédiatement que le salaire moyen est plus de deux fois supérieur au salaire médian. Cette disparité indique une forte asymétrie positive de la distribution : une minorité de joueurs stars, semble percevoir des rémunérations extrêmement élevées qui vont tirer la moyenne vers le haut.  
@@ -342,6 +360,8 @@ On a donc une explication sur pourquoi la moyenne est tirée vers le haut, les c
 Le salaire médian est alors bien plus représentatif du joueur typique que le salaire moyen.
 
 ```{r}
+# Création du tableau de fréquences pour les classes de salaires
+
 tableau_freq <- data.frame(nba_f) %>% 
   group_by(classe_salaire) %>% # On se focalise sur les classes de salaires.
   
@@ -349,11 +369,19 @@ tableau_freq <- data.frame(nba_f) %>%
   
   mutate( 
     Frequence = Effectif / sum(Effectif), # On rajoute la fréquence.
-    Frequence_Pourcentage = Frequence * 100, '%', # On convertit en %.
+    
+    # On convertit en %, on arrondit à 2 décimales et on colle le symbole %
+    Frequence_Pourcentage = paste0(round(Frequence * 100, 2), " %") 
   )
 
-cat("Tableau des effectifs et fréquences :\n") # Pour introduire.
-print(tableau_freq) # Affiche le tableau calculé.
+# Affichage du tableau des fréquences avec kable pour un rendu professionnel
+kable(
+  tableau_freq,
+  digits = 3, # Arrondi à 3 décimales pour la colonne Fréquence
+  col.names = c("Tranche de salaire", "Effectif", "Fréquence", "Pourcentage"),
+  align = c("l", "c", "c", "c"), # Aligne le texte (gauche, centre, centre, centre)
+  caption = "Distribution des joueurs par tranche de salaire"
+)
 ```
 
 Le tableau montre que 67 % des joueurs gagnent moins de 10 millions de dollars par an (ce qui correspond presque à notre moyenne), cette concentration massive confirme une distribution très inégalitaire où les hauts salaires font figure d'exception. Moins de 1 % de l'effectif atteint la tranche supérieure des 50 millions. Ces chiffres valident la structure pyramidale de l'économie de la ligue, où les plus forts vont être les mieux payés.
@@ -527,8 +555,13 @@ nba_f$residus <- residuals(modele_salary_fp)
 # Génère les salaires théoriques en fonction du score Fantasy.
 nba_f$salary_hat <- predict(modele_salary_fp)
 
-# Affichage de ces nouvelles valeurs :
-head(nba_f %>% select(Salary, FP, salary_hat, residus))
+# Affichage propre des salaires réels comparés aux prédictions du modèle
+kable(
+  head(nba_f %>% select(Player, Salary, FP, salary_hat, residus)),
+  digits = 0, # Pas de décimales car ce sont des dollars entiers
+  col.names = c("Joueur", "Salaire Réel", "Score Fantasy", "Salaire Prédit", "Erreur (Résidu)"),
+  caption = "Comparaison entre les salaires réels et prédits (6 premiers joueurs)"
+)
 ```
 
 
@@ -581,8 +614,13 @@ tableau_quali <- table(
   # leur impact par leur présence sur le terrain.
 )
 
-tableau_quali
+
+kable(
+  tableau_quali,
+  caption = "Tableau de contingence : Tranche d'âge et Impact (+/-) pour les meilleurs joueurs"
+)
 ```
+
 On va faire un test du Chi-2 avec simulation de Monte-Carlo afin de confirmer notre intuition 
 
 
