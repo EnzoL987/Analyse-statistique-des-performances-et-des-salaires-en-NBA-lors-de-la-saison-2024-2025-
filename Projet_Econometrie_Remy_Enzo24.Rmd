@@ -16,6 +16,8 @@ header-includes:
   - \usepackage{tocloft}
   - \renewcommand{\cftsecaftersnum}{.}
   - \renewcommand{\contentsname}{Sommaire}
+params:
+  afficher_code: TRUE
 ---
 
 \newpage
@@ -54,8 +56,15 @@ Dans ce projet, nous analysons les données réelles de la saison 2024-2025 de l
 
 Pour voir le code :
 
-```{r}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include=FALSE}
+# Configuration globale de knitr : 
+# "echo" affiche ou masque le code en fonction du paramètre YAML
+# "warning" et "message" masquent les alertes de chargement des packages
+knitr::opts_chunk$set(
+  echo = params$afficher_code, 
+  warning = FALSE, 
+  message = FALSE
+)
 ```
 
 On charge les packages nécessaires pour le début :
