@@ -54,10 +54,10 @@ Dans ce projet, nous analysons les données réelles de la saison 2024-2025 de l
 }
 \end{center}
 
-Pour voir le code :
+Pour répondre à cette problématique, notre étude s'articulera autour de trois grands axes. Dans un premier temps, nous explorerons individuellement les variables clés de notre base (salaires et nationalités) pour en comprendre la distribution. Ensuite, nous déploierons des analyses bivariées et des modèles de régression pour quantifier mathématiquement les liens entre la performance, l'âge et la rémunération. Enfin, nous utiliserons des méthodes statistiques avancées (Analyse en Composantes Principales et Clustering K-means) pour dresser une typologie claire des différents profils de joueurs évoluant dans la ligue.
 
 ```{r setup, include=FALSE}
-# Configuration globale de knitr : 
+# Configuration globale de knitr pour décider si l'on veut voir le code :
 # "echo" affiche ou masque le code en fonction du paramètre YAML
 # "warning" et "message" masquent les alertes de chargement des packages
 knitr::opts_chunk$set(
@@ -67,9 +67,9 @@ knitr::opts_chunk$set(
 )
 ```
 
-On charge les packages nécessaires pour le début :
-
 ```{r}
+# On charge les packages nécessaires pour le début :
+
 pacman::p_load(tidyverse, knitr, vtable, broom)
 ```
 
@@ -77,9 +77,9 @@ pacman::p_load(tidyverse, knitr, vtable, broom)
 
 Pour ce projet, nous avons combiné deux sources de données. Comme les statistiques officielles de la NBA n'incluent pas les revenus des joueurs, nous y avons ajouté les salaires annuels provenant d'une base de données Kaggle.
 
-Importation des salaires :
-
 ```{r}
+# Importation des salaires :
+
 salaires <- read.csv("NBA Player Salaries_2024-25_1.csv")
 ```
 
@@ -89,9 +89,9 @@ Pour la base de données de la NBA on utilise read_csv car nous n'avons pas trou
 stats <- read.csv("base_stats_NBA_24_25.csv")
 ```
 
-Jointure des deux bases :
-
 ```{r}
+# Jointure des deux bases :
+
 nba <- inner_join(stats, salaires, by = "Player")
 ```
 
@@ -99,22 +99,27 @@ Aperçu :
 
 ```{r}
 # Affichage propre des 6 premières lignes et des 6 premières colonnes
+
 kable(
   head(nba[, 1:10]), # On restreint pour la clareté car nous avons beaucoup de features.
   caption = "Aperçu des premières lignes de la base"
 )
 ```
 
-On va chercher à voir s'il y a des valeurs manqantes :
+
 
 ```{r}
+# On va chercher à voir s'il y a des valeurs manqantes :
+
 nombre_na <- sum(is.na(nba))
-print(paste("Nombre de valeurs manquantes :", nombre_na))
+cat("Nombre de valeurs manquantes dans la base d'origine :", nombre_na, "\n")
 ```
 
-Nettoyage de la base :
+
 
 ```{r}
+# Nettoyage de la base :
+
 nba1 <- nba %>%
   distinct() %>% # Suppression des doublons parfaits de lignes
   distinct(Player, .keep_all = TRUE) %>% # Conservation de la première occurrence pour chaque joueur unique
@@ -129,12 +134,13 @@ nba1 <- nba %>%
 # Vérification finale de l'absence de valeurs manquantes après le nettoyage
 
 nombre_na <- sum(is.na(nba1))
-cat("Nombre de valeurs manquantes :", nombre_na, "\n")
+cat("Nombre de valeurs manquantes dans la base après les modifications :", nombre_na, "\n")
 ```
 
-On fait maintenant notre grande sélection des données qu'on vous présente dans la partie "Descriprion des données" qui vient juste après.
-
 ```{r}
+# On fait maintenant notre grande sélection des données qu'on vous présente dans 
+# la partie "Descriprion des données" qui vient juste après.
+
 nba_f <- nba1 %>% # On stocke le résultat dans un nouvel objet "nba_f".
   
   mutate( # On veut créer de nouvelles variables qualitatives ordinales.
@@ -230,13 +236,12 @@ kable(
 )
 ```
 
-Petit points statistiques sur les features qu'on va le plus utiliser :
 
 ```{r}
 st(
   nba1 %>% select(Age, Salary, GP, Min, FP, PTS, REB, AST), 
   out = "kable", # Force la sortie en format kable pour le PDF
-  title = "Résumé statistique des variables quantitatives",
+  title = "Résumé statistique des variables quantitatives que l'on va utiliser",
   labels = c("Âge", "Salaire", "Matchs joués", "Minutes", "Score Fantasy", "Points", "Rebonds", "Passes")
 )
 ```
@@ -282,7 +287,9 @@ Nous n'avons aucune valeurs manquantes ni sur la base initiale ni sur la finale.
 ## Description des variables pour la base finale :
 
 Étant donné le grand nombre de variables dans notre base, nous allons nous focaliser uniquement sur les variables majeures qui vont être les plus **pertinentes** pour nos analyses.  
-Dans le basket, certaines variables sont dites "majeures", ces variables sont : **PTS, REB, AST, AST, STL et BLK.** Ces dernières vont être les éléments clés qui vont être analysées afin de juger les performances d'un joueur.
+Dans le basket, certaines variables sont dites "majeures", ces variables sont : **PTS, REB, AST, AST, STL et BLK.** Ces dernières vont être les éléments clés qui vont être analysées afin de juger les performances d'un joueur. 
+
+Nous avons fait le choix d'écarter les statistiques trop spécifiques (comme le détail des tirs à 3 points ou les pourcentages aux lancers francs) pour éviter de "noyer" nos algorithmes dans des variables redondantes. En nous concentrant sur les métriques globales reconnues par les analystes sportifs, nous garantissons des modèles statistiques plus robustes et plus lisibles.
 
 Rentrons dans le détails des variables qui vont nous être utiles pour les analyses :
 
@@ -480,27 +487,24 @@ Ce chiffre prend tout son sens lorsqu'on l'analyse à l'échelle de la ligue. En
 \hrule 
 \vspace{0.4cm}
 
-## Représentation visuelle : Le Top 10 des nationalités
+## Représentation visuelle et tableau des fréquencese des Top 10 des nationalités en NBA
 
 ```{r}
 nba_f %>%
-  count(Nationality) %>% # Compte le nombre de joueurs par pays.
-  top_n(10,n) %>% # Garde les 10 nationalités les plus représentées sur les n.
+  count(Nationality, name = "n") %>%      # Compte le nombre de joueurs par pays
+  arrange(desc(n)) %>%                    # Trie du plus grand au plus petit
+  slice_head(n = 10) %>%                  # Ne conserve strictement que les 10 premières lignes même si il y a égalité
   
-  ggplot(aes(x = reorder(Nationality, n), y = n)) + # Ordonne les pays par
-  # effectif croissant pour la lisibilité.
-  geom_bar(stat = "identity", fill = "steelblue") +
-  coord_flip() + # Aligne les barres horizontalement pour lire les noms de
-  # pays.
+  ggplot(aes(x = reorder(Nationality, n), y = n)) +
+  geom_col(fill = "steelblue") +          # geom_col() remplace avantageusement geom_bar(stat = "identity")
+  coord_flip() +
   labs(
     title = "Top 10 des nationalités en NBA",
-    x = "Pays", # Axe des ordonnées.
-    y = "Nombre de joueurs" # Axe des abscisses.
+    x = "Pays",
+    y = "Nombre de joueurs"
   ) +
   theme_minimal()
 ```
-
-## Tableau des fréquences et interprétation globale
 
 ```{r}
 # Création du tableau de fréquences pour la variable Nationality (Top 10).
@@ -526,6 +530,8 @@ De part le diagramme ainsi que par le tableau, on observe une nette surreprésen
 \hrule 
 \vspace{0.4cm}
 
+L'exploration individuelle de nos données a mis en évidence de fortes disparités, notamment une distribution salariale très asymétrique où une élite capte la majorité des revenus. L'objectif de cette nouvelle section est de comprendre ce qui justifie de telles différences. Nous allons donc croiser nos variables pour vérifier si l'impact sur le terrain explique rationnellement l'explosion des contrats.
+
 Dans une première partie, nous allons nous focaliser sur la relation entre la variable FP et le salaire (Salary) afin d'essayer de déceler un lien entre la performance sportive et la rémunération.
 
 ## Contexte : Analyse univariée du Score Fantasy (FP)
@@ -540,6 +546,7 @@ cat("Le score 'Fantasy' moyen est",Moyenne_FP,"\n")
 cat("Le score 'Fantasy' median est",Median_FP,"\n")
 cat("L'écart-type entre pour le score 'Fantasy' est",Ecarttype_FP,"\n")
 ```
+
 L'analyse des scores Fantasy révèle aussi une distribution asymétrique vers la droite, où la moyenne est supérieure à la médiane. Cet écart indique que les performances d'une minorité de joueurs d'élite tirent la moyenne vers le haut, tandis que le joueur typique se situe autour de 1000 points.  
 
 De plus L'écart-type élevé souligne une forte hétérogénéité des performances au sein de la ligue, confirmant une grande disparité entre les joueurs qui vont jouer la grandes parties des matchs et ceux qui vont avoir un rôle de soutient.
@@ -656,7 +663,7 @@ De plus à performance égale, l'âge augmente le salaire, confirmant la "prime 
 
 ## Tableau de contingence et observation graphique
 
-On a choisi ici d'analyser la variable de tranche d'âge avec celle de l'impact sur le terrain lors d'un match tout en exigeant une certaine exigence de niveau pour les joueurs.
+On a choisi ici d'analyser la variable de tranche d'âge avec celle de l'impact sur le terrain lors d'un match tout en exigeant une certaine exigence de niveau pour les joueurs en prenant que ceux avec un Score Fantasy supérieur à la moyenne de la ligue.
 
 ```{r}
 # Crée un tableau de contingence croisant les tranches d'âge et l'impact.
@@ -756,6 +763,8 @@ kable(
 )
 ```
 
+Le résultat de l'ANOVA affiche une probabilité (Pr(>F)) extrêmement faible (largement inférieure à 0.05). Cela rejette l'hypothèse selon laquelle les salaires moyens seraient identiques entre les groupes. Nous avons donc la preuve statistique que la tranche d'âge a un effet réel et significatif sur la rémunération des joueurs.
+
 
 ```{r}
 ggplot(nba_f) +
@@ -771,7 +780,6 @@ ggplot(nba_f) +
   theme_minimal()
 ```
 
-Le résultat de l'ANOVA affiche une probabilité (Pr(>F)) extrêmement faible (largement inférieure à 0.05). Cela rejette l'hypothèse selon laquelle les salaires moyens seraient identiques entre les groupes. Nous avons donc la preuve statistique que la tranche d'âge a un effet réel et significatif sur la rémunération des joueurs.
 
 En combinant ce test avec l'observation des boîtes à moustaches, on observe que les carrières en NBA peuvent être différenciées sous 4 grandes étapes :
 
@@ -815,22 +823,24 @@ Enfin, passé ce sommet, le mouvement s'inverse et la pente redescend pour les d
 \hrule 
 \vspace{0.4cm}
 
-Chargement des librairy pour l'analyse de l'ACP. 
-
 ```{r}
+# Chargement des librairy pour l'analyse de l'ACP. 
+
 pacman::p_load(ggfortify, corrr)
 ```
 
 ## Visualisation préalable des corrélations
 
-On garde que les variables quantitatives :
 
 ```{r}
+# On garde que les variables quantitatives :
+
 donnees_acp <- nba_f %>%
   select(Salary, FP, PTS, REB, AST, STL, BLK, TOV, Min, Age, plus_minus, FGper)
 
 summary(donnees_acp)
 ```
+
 Visualisation rapide des relations entre les variables avant de lancer l' ACP :
 
 ```{r, warning=FALSE, message=FALSE}
@@ -1136,7 +1146,7 @@ kable(
   apercu_transp_scores %>% select(Axe, everything()), 
   digits = 2, 
   row.names = FALSE, 
-  caption = "Coordonnées des 6 premiers joueurs sur les 3 composantes (nouvelles variables)"
+  caption = "Coordonnées des 6 premiers joueurs sur les 3 composantes"
 )
 ```
 
@@ -1176,22 +1186,26 @@ Sur le graphique de projection, la PC2 permet de ventiler la masse des joueurs. 
 \hrule 
 \vspace{0.4cm}
 
-Chargement des librairy pour cette partie : 
+La précédente Analyse en Composantes Principales nous a permis de comprendre les grands "axes" qui structurent la performance en NBA (le volume de jeu d'un côté, le profil défensif/vétéran de l'autre). L'objectif de cette dernière étape est de s'appuyer sur ces similarités statistiques pour regrouper physiquement les joueurs. Grâce à une classification non supervisée, nous allons chercher à diviser la ligue en plusieurs "classes" homogènes, réunissant les athlètes partageant le même profil global de rentabilité et d'impact.
 
 ```{r}
+# Chargement des librairy pour cette partie : 
+
 pacman::p_load(factoextra, cluster)
 ```
 
-On sélectionne à nouveau que les variables quantitatives.
 
 ```{r}
+# On sélectionne à nouveau que les variables quantitatives.
+
 donnees_kmeans <- nba_f %>%
   select(Salary, FP, PTS, REB, AST, STL, BLK, TOV, Min, Age, plus_minus, FGper)
 ```
 
-On centre et réduit nos données grâce à scale.
 
 ```{r}
+# On centre et réduit nos données grâce à scale.
+
 donnees_kmeans_scaled <- scale(donnees_kmeans) 
 ```
 
@@ -1240,6 +1254,7 @@ fviz_dend(
   xlab = "Joueurs" # Nom de l'axe des abscisses
 )
 ```
+
 L'arbre hiérarchique illustre le processus de regroupement progressif des joueurs en fonction de leurs similarités statistiques. La hauteur des branches, sur l'axe des ordonnées, représente la distance ou la "différence" entre les groupes.
 
 En observant les sauts de hauteur les plus importants dans l'arbre, on remarque qu'une coupe en 3 grands groupes (encadrés ici par les rectangles) est très naturelle et cohérente. Cela vient parfaitement valider notre analyse précédente avec la méthode du coude : la séparation de la ligue en 3 profils distincts est la structure la plus pertinente pour nos données. Nous allons donc conserver ce paramètre (k=3) pour appliquer l'algorithme des K-means afin de consolider ces groupes.
