@@ -1,36 +1,37 @@
-# Projet Économétrie : Performances et Salaires en NBA (2024-2025)
+# Econometrics Project: Relations between Performances and Salary in the NBA (2024-2025)
 
-## 📌 Présentation du projet
-Ce projet a été réalisé dans le cadre d'un cours de Science des Données / Économétrie. L'objectif principal est d'analyser un jeu de données réelles de la NBA pour répondre à la problématique suivante : **Les statistiques permettent-elles réellement de refléter la valeur (le salaire) d'un joueur NBA ?**
+## 📌 Project Overview
+This project was developed as part of a Data Science / Econometrics course. The main goal is to analyze a real-world NBA dataset to answer the following question: **Do statistics truly reflect the value (salary) of an NBA player?**
 
-Nous même amateurs de la NBA, nous allons essayer ici de démontrer que la NBA fonctionne sur deux économies parallèles : si les statistiques expliquent le salaire des joueurs de rotation, d'autres facteurs (statut, expérience) prennent le relais pour les superstars.
+As huge NBA fans ourselves, we will try to demonstrate here that the league operates on two parallel economies: while statistics perfectly explain the salaries of rotation players, other factors (status, experience) take over for the superstars.
 
-## 🎯 Objectifs et Méthodes Statistiques
-Ce projet valide la maîtrise d'un pipeline complet en Data Science sous **R**, allant du nettoyage des données jusqu'à la modélisation mathématique avancée. 
+## 🎯 Objectives and Statistical Methods
+This project showcases the mastery of an end-to-end Data Science pipeline in **R**, from data cleaning to advanced mathematical modeling. 
 
-Les méthodes suivantes ont été implémentées et interprétées :
-* **Analyses Univariées :** Étude des distributions (histogrammes, boxplots, valeurs atypiques) des salaires et de l'origine des joueurs.
-* **Analyses Bivariées & Tests d'hypothèses :** 
-  * Corrélation et Régression Linéaire Multiple (Salaire ~ Performance + Âge + Disponibilité) avec analyse des résidus (normalité, homoscédasticité).
-  * Test du Chi-2 simulé par Monte-Carlo.
-  * Analyse de la Variance (ANOVA).
-* **Réduction de dimensionnalité :** Analyse en Composantes Principales (ACP) pour identifier les profils de jeu.
-* **Machine Learning (Non supervisé) :** Classification Ascendante Hiérarchique (CAH) et Algorithme des K-Means pour segmenter la ligue en clusters de profils de joueurs.
+The following methods were implemented and interpreted:
+* **Univariate Analysis:** Study of the distributions (histograms, boxplots, outliers) of salaries and player origins.
+* **Bivariate Analysis & Hypothesis Testing:** * Correlation and Multiple Linear Regression (Salary ~ Performance + Age + Availability) with residual analysis (normality, homoscedasticity).
+  * Monte-Carlo simulated Chi-Squared Test.
+  * Analysis of Variance (ANOVA).
+* **Dimensionality Reduction:** Principal Component Analysis (PCA) to identify playing profiles.
+* **Machine Learning (Unsupervised):** Hierarchical Agglomerative Clustering (HAC) and K-Means Algorithm to segment the league into distinct player profile clusters.
 
-## 🛠️ Technologies Utilisées
-* **Langage :** R
-* **Environnement :** RStudio / R Markdown (Génération de rapport PDF automatisé).
-* **Packages principaux :** `tidyverse` (manipulation de données), `ggplot2` (dataviz), `factoextra` (clustering), `broom` et `vtable` (formatage statistique).
+## 🛠️ Technologies Used
+* **Language:** R
+* **Environment:** RStudio / R Markdown (Automated PDF report generation).
+* **Core Packages:** `tidyverse` (data manipulation), `ggplot2` (dataviz), `factoextra` (clustering), `broom` and `vtable` (statistical formatting).
 
-## 📂 Structure du dépôt
-* `Projet_Econometrie_Remy_Enzo24.Rmd` : Le script source contenant l'intégralité du code commenté.
-* `Projet_Sans_Code.pdf` : Le rapport final généré, mis en page et interprété.
-* `base_stats_NBA_24_25.csv` & `NBA Player Salaries_2024-25_1.csv` : Les jeux de données bruts (statistiques officielles et salaires Kaggle).
+## 📂 Repository Structure
+* `Projet_Econometrie_Remy_Enzo24.Rmd`: The source script containing all the fully commented code.
+* `Projet_Sans_Code.pdf`: The final generated report, fully formatted and interpreted.
+* `base_stats_NBA_24_25.csv` & `NBA Player Salaries_2024-25_1.csv`: The raw datasets (official NBA statistics and Kaggle salaries).
 
-## 🚀 Comment reproduire l'analyse ?
-1. Clonez ce dépôt sur votre machine locale.
-2. Assurez-vous d'avoir installé R et RStudio.
-3. Ouvrez le fichier `.Rmd`. Le package `pacman` se chargera d'installer et de charger automatiquement les dépendances nécessaires.
-4. Pour l'export il vous faudra rentrer ça dans la **Console** directement selon si vous voulez avoir ou non le code :
-   * rmarkdown::render("Projet_Econometrie_Remy_Enzo24.Rmd", params = list(afficher_code = TRUE), output_file = "Projet_Avec_Code.pdf")
-   * rmarkdown::render("Projet_Econometrie_Remy_Enzo24.Rmd", params = list(afficher_code = FALSE), output_file = "Projet_Sans_Code.pdf")
+## 🚀 How to Reproduce the Analysis?
+1. Clone this repository to your local machine.
+2. Make sure you have R and RStudio installed.
+3. Open the `.Rmd` file. The `pacman` package will automatically install and load the required dependencies.
+4. To generate the PDF reports, run the following commands directly in the R **Console**, depending on whether you want to show or hide the source code:
+   * With the code : rmarkdown::render("Projet_Econometrie_Remy_Enzo24.Rmd", params = list(afficher_code = TRUE), output_file = "Projet_Avec_Code.pdf")
+   * Without : rmarkdown::render("Projet_Econometrie_Remy_Enzo24.Rmd", params = list(afficher_code = FALSE), output_file = "Projet_Sans_Code.pdf") 
+
+🌍 Note: The final PDF report is written in French. However, I would be more than happy to discuss the methodology, the code, or the results in English! Feel free to reach out.
