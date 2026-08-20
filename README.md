@@ -1,4 +1,4 @@
-# Econometrics Project: Analysis of the Relationship Between Performance and Salaries in the NBA During the 2024–2025 Season
+# Econometrics Project : Analysis of the Relationship Between Performance and Salaries in the NBA During the 2024–2025 Season
 
 ## 📌 Project Overview
 This project was developed as part of a Data Science / Econometrics course. The main goal is to analyze a real-world NBA dataset to answer the following question: **Do statistics truly reflect the value (salary) of an NBA player?**
