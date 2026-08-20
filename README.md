@@ -32,6 +32,8 @@ The following methods were implemented and interpreted:
 3. Open the `.Rmd` file. The `pacman` package will automatically install and load the required dependencies.
 4. To generate the PDF reports, run the following commands directly in the R **Console**, depending on whether you want to show or hide the source code:
    * With the code : rmarkdown::render("Projet_Econometrie_Remy_Enzo24.Rmd", params = list(afficher_code = TRUE), output_file = "Projet_Avec_Code.pdf")
-   * Without : rmarkdown::render("Projet_Econometrie_Remy_Enzo24.Rmd", params = list(afficher_code = FALSE), output_file = "Projet_Sans_Code.pdf") 
+   * Without : rmarkdown::render("Projet_Econometrie_Remy_Enzo24.Rmd", params = list(afficher_code = FALSE), output_file = "Projet_Sans_Code.pdf")
+ 
+##
 
-🌍 Note: The final PDF report is written in French. However, I would be more than happy to discuss the methodology, the code, or the results in English! Feel free to reach out.
+### **🌍 Note : The final PDF report is written in French. However, I would be more than happy to discuss the methodology, the code, or the results in English! Feel free to reach out.
